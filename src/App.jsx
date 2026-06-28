@@ -1649,33 +1649,36 @@ function App() {
                                     </div>
                                   ) : (
                                     <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-                                      <label className="upload-area" style={{ flex: 1, padding: '0.75rem', borderStyle: 'dashed' }}>
+                                      <label htmlFor={`edit-inline-cam-${clim.id}`} className="upload-area" style={{ flex: 1, padding: '0.75rem', borderStyle: 'dashed' }}>
                                         <span className="upload-icon" style={{ fontSize: '1.1rem' }}>
                                           <IconCamera />
                                         </span>
                                         <span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Prendre photo</span>
-                                        <input 
-                                          type="file" 
-                                          accept="image/*" 
-                                          capture="environment"
-                                          style={{ display: 'none' }} 
-                                          onChange={handleEditPhotoUpload}
-                                          disabled={isCompressing}
-                                        />
                                       </label>
-                                      <label className="upload-area" style={{ flex: 1, padding: '0.75rem', borderStyle: 'dashed' }}>
+                                      <input 
+                                        id={`edit-inline-cam-${clim.id}`}
+                                        type="file" 
+                                        accept="image/*" 
+                                        capture="environment"
+                                        style={{ display: 'none' }} 
+                                        onChange={handleEditPhotoUpload}
+                                        disabled={isCompressing}
+                                      />
+
+                                      <label htmlFor={`edit-inline-gal-${clim.id}`} className="upload-area" style={{ flex: 1, padding: '0.75rem', borderStyle: 'dashed' }}>
                                         <span className="upload-icon" style={{ fontSize: '1.1rem', color: '#10b981' }}>
                                           📁
                                         </span>
                                         <span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Galerie / Fichier</span>
-                                        <input 
-                                          type="file" 
-                                          accept="image/*" 
-                                          style={{ display: 'none' }} 
-                                          onChange={handleEditPhotoUpload}
-                                          disabled={isCompressing}
-                                        />
                                       </label>
+                                      <input 
+                                        id={`edit-inline-gal-${clim.id}`}
+                                        type="file" 
+                                        accept="image/*" 
+                                        style={{ display: 'none' }} 
+                                        onChange={handleEditPhotoUpload}
+                                        disabled={isCompressing}
+                                      />
                                     </div>
                                   )}
                                 </div>
@@ -1843,33 +1846,36 @@ function App() {
                             
                             {!climPhoto ? (
                                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
-                                 <label className="upload-area" style={{ flex: 1, padding: '1.25rem' }}>
+                                 <label htmlFor="add-camera-input" className="upload-area" style={{ flex: 1, padding: '1.25rem', cursor: 'pointer' }}>
                                    <span className="upload-icon">
                                      <IconCamera />
                                    </span>
                                    <span style={{ fontWeight: '600', fontSize: '0.8rem' }}>Prendre photo</span>
-                                   <input 
-                                     type="file" 
-                                     accept="image/*" 
-                                     capture="environment"
-                                     style={{ display: 'none' }} 
-                                     onChange={handlePhotoUpload}
-                                     disabled={isCompressing}
-                                   />
                                  </label>
-                                 <label className="upload-area" style={{ flex: 1, padding: '1.25rem' }}>
+                                 <input 
+                                   id="add-camera-input"
+                                   type="file" 
+                                   accept="image/*" 
+                                   capture="environment"
+                                   style={{ display: 'none' }} 
+                                   onChange={handlePhotoUpload}
+                                   disabled={isCompressing}
+                                 />
+
+                                 <label htmlFor="add-gallery-input" className="upload-area" style={{ flex: 1, padding: '1.25rem', cursor: 'pointer' }}>
                                    <span className="upload-icon" style={{ color: '#10b981' }}>
                                      📁
                                    </span>
                                    <span style={{ fontWeight: '600', fontSize: '0.8rem' }}>Galerie / Fichier</span>
-                                   <input 
-                                     type="file" 
-                                     accept="image/*" 
-                                     style={{ display: 'none' }} 
-                                     onChange={handlePhotoUpload}
-                                     disabled={isCompressing}
-                                   />
                                  </label>
+                                 <input 
+                                   id="add-gallery-input"
+                                   type="file" 
+                                   accept="image/*" 
+                                   style={{ display: 'none' }} 
+                                   onChange={handlePhotoUpload}
+                                   disabled={isCompressing}
+                                 />
                                </div>
                             ) : (
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2205,33 +2211,36 @@ function App() {
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
-                          <label className="upload-area" style={{ flex: 1, padding: '1.25rem', borderStyle: 'dashed' }}>
+                          <label htmlFor="edit-modal-camera-input" className="upload-area" style={{ flex: 1, padding: '1.25rem', borderStyle: 'dashed', cursor: 'pointer' }}>
                             <span className="upload-icon">
                               <IconCamera />
                             </span>
                             <span style={{ fontWeight: '600', fontSize: '0.8rem' }}>Prendre photo</span>
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              capture="environment"
-                              style={{ display: 'none' }} 
-                              onChange={handleEditPhotoUpload}
-                              disabled={isCompressing}
-                            />
                           </label>
-                          <label className="upload-area" style={{ flex: 1, padding: '1.25rem', borderStyle: 'dashed' }}>
+                          <input 
+                            id="edit-modal-camera-input"
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment"
+                            style={{ display: 'none' }} 
+                            onChange={handleEditPhotoUpload}
+                            disabled={isCompressing}
+                          />
+
+                          <label htmlFor="edit-modal-gallery-input" className="upload-area" style={{ flex: 1, padding: '1.25rem', borderStyle: 'dashed', cursor: 'pointer' }}>
                             <span className="upload-icon" style={{ color: '#10b981' }}>
                               📁
                             </span>
                             <span style={{ fontWeight: '600', fontSize: '0.8rem' }}>Galerie / Fichier</span>
-                            <input 
-                              type="file" 
-                              accept="image/*" 
-                              style={{ display: 'none' }} 
-                              onChange={handleEditPhotoUpload}
-                              disabled={isCompressing}
-                            />
                           </label>
+                          <input 
+                            id="edit-modal-gallery-input"
+                            type="file" 
+                            accept="image/*" 
+                            style={{ display: 'none' }} 
+                            onChange={handleEditPhotoUpload}
+                            disabled={isCompressing}
+                          />
                         </div>
                       )}
                     </div>
