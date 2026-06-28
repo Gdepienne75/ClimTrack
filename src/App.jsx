@@ -39,6 +39,41 @@ const IconSplit = () => (
   </svg>
 );
 
+const IconSite = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', color: 'var(--primary)' }}>
+    <path d="M3 21h18" />
+    <path d="M19 21V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v14" />
+    <path d="M9 5V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    <path d="M12 12v4" />
+    <path d="M8 12v4" />
+    <path d="M16 12v4" />
+  </svg>
+);
+
+const IconBuilding = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', color: 'var(--text-secondary)' }}>
+    <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+    <line x1="9" y1="22" x2="9" y2="16" />
+    <line x1="15" y1="22" x2="15" y2="16" />
+    <line x1="9" y1="16" x2="15" y2="16" />
+    <path d="M8 6h.01M16 6h.01M8 11h.01M16 11h.01" />
+  </svg>
+);
+
+const IconFloor = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', color: 'var(--text-muted)' }}>
+    <path d="M2 17h20M2 12h20M2 7h20" />
+    <path d="M5 7v10M19 7v10" />
+  </svg>
+);
+
+const IconRoom = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px', color: 'var(--primary)' }}>
+    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <polyline points="9 22 9 12 15 12 15 22" />
+  </svg>
+);
+
 // --- DEFAULT SUGGESTIONS (Used for seeding the database table if empty) ---
 const DEFAULT_SITES = ["Site Principal (Paris)", "Technopole (Lyon)", "Annexe Est (Strasbourg)"];
 const DEFAULT_BUILDINGS = ["Bâtiment A - Administration", "Bâtiment B - R&D", "Bâtiment C - Logistique"];
@@ -1293,14 +1328,11 @@ function App() {
               <div className="tree-container">
                 {currentStep < 4 ? (
                   <>
-                    <h2 className="mb-md" style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+                    <h2 className="mb-md" style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
                       Hiérarchie des locaux
                     </h2>
-                    <p className="mb-lg" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      Explorez l'arborescence ci-dessous ou utilisez la recherche pour filtrer un local. Vous pouvez ajouter des lieux (sites, bâtiments, niveaux ou pièces) directement à chaque niveau de l'arbre.
-                    </p>
 
-                    <div className="tree-header">
+                    <div className="tree-header" style={{ marginBottom: '1rem' }}>
                       <div className="input-wrapper tree-search-bar">
                         <span className="input-icon"><IconSearch /></span>
                         <input 
@@ -1311,33 +1343,7 @@ function App() {
                           onChange={(e) => setTreeSearchQuery(e.target.value)}
                         />
                       </div>
-
-                      <button 
-                        className="btn btn-primary"
-                        onClick={() => {
-                          setAddingNode({ parentKey: 'root', type: 'site' });
-                          setNewNodeValue('');
-                        }}
-                      >
-                        <IconPlus /> Nouveau Site
-                      </button>
                     </div>
-
-                    {/* Inline input for Site creation at root level */}
-                    {addingNode && addingNode.parentKey === 'root' && addingNode.type === 'site' && (
-                      <div className="tree-node-input" style={{ paddingLeft: 0, marginBottom: '1rem', background: '#f8fafc', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
-                        <input 
-                          type="text" 
-                          className="input-control" 
-                          placeholder="Nom du nouveau site..."
-                          value={newNodeValue}
-                          onChange={(e) => setNewNodeValue(e.target.value)}
-                          autoFocus
-                        />
-                        <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
-                      </div>
-                    )}
 
                     {/* Tree List */}
                     {/* Tree List or Search Results */}
@@ -1369,7 +1375,7 @@ function App() {
                                   }}
                                 >
                                   <span className="tree-node-label" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                                    🏢 {res.site} ➔ 🏠 {res.batiment} ➔ 📶 Niveau : {res.etage} ➔ <span style={{ color: 'var(--primary)' }}>📍 {res.localisation}</span>
+                                    Site : {res.site} ➔ Bât. : {res.batiment} ➔ Niv. : {res.etage} ➔ <span style={{ color: 'var(--primary)' }}>Local : {res.localisation}</span>
                                   </span>
                                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                     Entrer ➔
@@ -1394,40 +1400,13 @@ function App() {
                                   <span style={{ transform: isSiteExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
                                     <IconChevronRight />
                                   </span>
-                                  🏢 {site}
+                                  <IconSite /> {site}
                                 </span>
-                                <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
-                                  <button 
-                                    className="tree-node-action-btn"
-                                    onClick={() => {
-                                      setAddingNode({ parentKey: siteKey, type: 'batiment', site });
-                                      setNewNodeValue('');
-                                    }}
-                                  >
-                                    + Bâtiment
-                                  </button>
-                                </div>
                               </div>
 
                               {/* Site children */}
                               {isSiteExpanded && (
                                 <div className="tree-children">
-                                  {/* Add Building Inline Input */}
-                                  {addingNode && addingNode.parentKey === siteKey && addingNode.type === 'batiment' && (
-                                    <div className="tree-node-input">
-                                      <input 
-                                        type="text" 
-                                        className="input-control" 
-                                        placeholder="Nom du bâtiment..."
-                                        value={newNodeValue}
-                                        onChange={(e) => setNewNodeValue(e.target.value)}
-                                        autoFocus
-                                      />
-                                      <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
-                                      <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
-                                    </div>
-                                  )}
-
                                   {buildings.length === 0 ? (
                                     <div style={{ padding: '0.4rem', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
                                       Chargement...
@@ -1447,7 +1426,7 @@ function App() {
                                               <span style={{ transform: isBatExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
                                                 <IconChevronRight />
                                               </span>
-                                              🏠 {bat}
+                                              <IconBuilding /> {bat}
                                             </span>
                                             <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
                                               <button 
@@ -1500,7 +1479,7 @@ function App() {
                                                           <span style={{ transform: isFloorExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
                                                             <IconChevronRight />
                                                           </span>
-                                                          📶 Niveau : {floor}
+                                                          <IconFloor /> Niveau : {floor}
                                                         </span>
                                                         <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
                                                           <button 
@@ -1555,7 +1534,7 @@ function App() {
                                                                   }}
                                                                 >
                                                                   <span className="tree-node-label localisation">
-                                                                    📍 {loc}
+                                                                    <IconRoom /> {loc}
                                                                   </span>
                                                                 </div>
                                                               );
