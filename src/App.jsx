@@ -86,6 +86,7 @@ function App() {
   const [editClimPower, setEditClimPower] = useState('');
   const [editClimDate, setEditClimDate] = useState('');
   const [editClimPhoto, setEditClimPhoto] = useState(null);
+  const [showInventoryEditModal, setShowInventoryEditModal] = useState(false);
 
   // Toast message
   const [toastMessage, setToastMessage] = useState('');
@@ -1978,13 +1979,25 @@ function App() {
                               <td data-label="Puissance">{clim.puissance ? `${clim.puissance} W` : '-'}</td>
                               <td data-label="Date de Pose">{formatDateFR(clim.date_pose)}</td>
                               <td data-label="Actions" style={{ textAlign: 'center' }}>
-                                <button 
-                                  className="btn btn-danger" 
-                                  style={{ width: '28px', height: '28px', padding: 0 }}
-                                  onClick={() => handleDelete(clim.id)}
-                                >
-                                  <IconTrash />
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                                  <button 
+                                    className="btn btn-secondary" 
+                                    style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
+                                    onClick={() => {
+                                      startEditing(clim);
+                                      setShowInventoryEditModal(true);
+                                    }}
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
+                                    className="btn btn-danger" 
+                                    style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
+                                    onClick={() => handleDelete(clim.id)}
+                                  >
+                                    <IconTrash />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -2030,8 +2043,18 @@ function App() {
 
                             <div className="report-card-footer">
                               <button 
+                                className="btn btn-secondary btn-sm" 
+                                style={{ flex: '1' }}
+                                onClick={() => {
+                                  startEditing(clim);
+                                  setShowInventoryEditModal(true);
+                                }}
+                              >
+                                ✏️ Modifier
+                              </button>
+                              <button 
                                 className="btn btn-danger btn-sm" 
-                                style={{ width: '100%' }}
+                                style={{ flex: '1' }}
                                 onClick={() => handleDelete(clim.id)}
                               >
                                 <IconTrash /> Supprimer
@@ -2058,7 +2081,133 @@ function App() {
           </main>
         </>
       )}
-    </div>
+          {/* --- EDIT INVENTORY MODAL (Material 3 Dialog) --- */}
+          {showInventoryEditModal && (
+            <div className="modal-backdrop" onClick={() => setShowInventoryEditModal(false)}>
+              <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2 className="modal-title">
+                    ✏️ Modifier l'équipement
+                  </h2>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} 
+                    onClick={() => setShowInventoryEditModal(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <form onSubmit={async (e) => {
+                  await handleSaveEdit(e);
+                  setShowInventoryEditModal(false);
+                }}>
+                  <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    
+                    <div className="form-group">
+                      <label htmlFor="edit-inv-num">Numéro du climatiseur *</label>
+                      <input 
+                        type="text" 
+                        id="edit-inv-num" 
+                        className="input-control no-icon"
+                        value={editClimNumber}
+                        onChange={(e) => setEditClimNumber(e.target.value)}
+                        required 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="edit-inv-type">Type de climatiseur</label>
+                      <select 
+                        id="edit-inv-type" 
+                        className="input-control no-icon"
+                        value={editClimType}
+                        onChange={(e) => setEditClimType(e.target.value)}
+                      >
+                        <option value="monobloc">Monobloc</option>
+                        <option value="split">Split</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="edit-inv-power">Puissance (Watts)</label>
+                      <input 
+                        type="number" 
+                        id="edit-inv-power" 
+                        className="input-control no-icon"
+                        value={editClimPower}
+                        onChange={(e) => setEditClimPower(e.target.value)}
+                        placeholder="Ex: 3500" 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="edit-inv-date">Date de pose *</label>
+                      <input 
+                        type="date" 
+                        id="edit-inv-date" 
+                        className="input-control no-icon"
+                        value={editClimDate}
+                        onChange={(e) => setEditClimDate(e.target.value)}
+                        required 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Photo de l'appareil</label>
+                      {editClimPhoto ? (
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', background: 'var(--background)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                          <div className="upload-preview" style={{ width: '80px', height: '80px', margin: 0 }}>
+                            <img src={editClimPhoto} alt="Prévisualisation" />
+                          </div>
+                          <button 
+                            type="button" 
+                            className="btn btn-danger btn-sm"
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', height: 'fit-content' }}
+                            onClick={() => setEditClimPhoto(null)}
+                          >
+                            Supprimer la photo
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="upload-area" style={{ borderStyle: 'dashed' }}>
+                          <span className="upload-icon">
+                            {isCompressing ? "..." : <IconCamera />}
+                          </span>
+                          <span style={{ fontWeight: '600', fontSize: '0.85rem' }}>
+                            {isCompressing ? "Compression en cours..." : "Prendre une photo ou charger un fichier"}
+                          </span>
+                          <input 
+                            type="file" 
+                            accept="image/*;capture=camera" 
+                            capture="environment"
+                            style={{ display: 'none' }} 
+                            onChange={handleEditPhotoUpload}
+                            disabled={isCompressing}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="modal-footer">
+                    <button type="submit" className="btn btn-primary" disabled={isCompressing}>
+                      Sauvegarder
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => setShowInventoryEditModal(false)}
+                      disabled={isCompressing}
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
   );
 }
 
