@@ -20,6 +20,24 @@ const IconMapPin = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="n
 const IconWind = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>;
 const IconDashboard = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>;
 const IconList = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
+const IconMonobloc = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="6" y="3" width="12" height="17" rx="2" />
+    <line x1="9" y1="7" x2="15" y2="7" />
+    <line x1="9" y1="10" x2="15" y2="10" />
+    <rect x="10" y="5" width="4" height="1" rx="0.5" fill="currentColor" />
+    <circle cx="9" cy="21" r="1" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="21" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+const IconSplit = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="6" width="20" height="7" rx="1.5" />
+    <circle cx="18" cy="9.5" r="0.75" fill="currentColor" stroke="none" />
+    <path d="M5 16c.5 1.5 2 1.5 2.5 0s2-1.5 2.5 0" />
+    <path d="M14 16c.5 1.5 2 1.5 2.5 0s2-1.5 2.5 0" />
+  </svg>
+);
 
 // --- DEFAULT SUGGESTIONS (Used for seeding the database table if empty) ---
 const DEFAULT_SITES = ["Site Principal (Paris)", "Technopole (Lyon)", "Annexe Est (Strasbourg)"];
@@ -1094,21 +1112,27 @@ function App() {
               className={`bottom-nav-item ${currentTab === 'dashboard' ? 'active' : ''}`}
               onClick={() => setCurrentTab('dashboard')}
             >
-              <IconDashboard />
+              <span className="bottom-nav-icon">
+                <IconDashboard />
+              </span>
               <span>Accueil</span>
             </div>
             <div 
               className={`bottom-nav-item ${currentTab === 'add' ? 'active' : ''}`}
               onClick={() => { setCurrentTab('add'); resetStepFlow(); }}
             >
-              <IconPlus />
+              <span className="bottom-nav-icon">
+                <IconPlus />
+              </span>
               <span>Recenser</span>
             </div>
             <div 
               className={`bottom-nav-item ${currentTab === 'report' ? 'active' : ''}`}
               onClick={() => setCurrentTab('report')}
             >
-              <IconList />
+              <span className="bottom-nav-icon">
+                <IconList />
+              </span>
               <span>Inventaire</span>
             </div>
           </nav>
@@ -1155,7 +1179,7 @@ function App() {
                     setSearchQuery('');
                   }}>
                     <div className="stat-icon-box" style={{ background: '#f0fdf4', color: '#16a34a' }}>
-                      <IconCheck />
+                      <IconMonobloc />
                     </div>
                     <div className="stat-data">
                       <span className="stat-number">{stats.monobloc}</span>
@@ -1170,7 +1194,7 @@ function App() {
                     setSearchQuery('');
                   }}>
                     <div className="stat-icon-box" style={{ background: '#eff6ff', color: '#3b82f6' }}>
-                      <IconList />
+                      <IconSplit />
                     </div>
                     <div className="stat-data">
                       <span className="stat-number">{stats.split}</span>
