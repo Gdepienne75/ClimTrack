@@ -82,13 +82,17 @@ const DEFAULT_LOCATIONS = ["Bureau 101", "Bureau 102", "Salle Réunion", "Local 
 
 function App() {
   // Auth states
-  const [isLoggedIn, setIsLoggedIn] = useState(() => sessionStorage.getItem('isLoggedIn') === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
 
   // Main navigation
-  const [currentTab, setCurrentTab] = useState('dashboard'); // 'dashboard', 'add', 'report'
+  const [currentTab, setCurrentTab] = useState(() => localStorage.getItem('currentTab') || 'dashboard'); // 'dashboard', 'add', 'report'
+
+  useEffect(() => {
+    localStorage.setItem('currentTab', currentTab);
+  }, [currentTab]);
 
   // Database records loaded from Supabase
   const [climatiseurs, setClimatiseurs] = useState([]);
@@ -508,7 +512,7 @@ function App() {
     e.preventDefault();
     if (usernameInput.trim().toLowerCase() === 'admin' && passwordInput === 'admin') {
       setIsLoggedIn(true);
-      sessionStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('isLoggedIn', 'true');
       setAuthError('');
     } else {
       setAuthError('Identifiants incorrects. Essayer "admin" / "admin".');
@@ -518,7 +522,8 @@ function App() {
   // Handle Logout
   const handleLogout = () => {
     setIsLoggedIn(false);
-    sessionStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('currentTab');
     setCurrentTab('dashboard');
     resetStepFlow();
   };
@@ -918,13 +923,13 @@ function App() {
 
       {/* --- ENTRY MODAL POPUP --- */}
       {showEntryModal && (
-        <div className="modal-overlay">
-          <div className="modal-card">
+        <div className="modal-backdrop" onClick={() => { setShowEntryModal(false); setSelectedLocation(''); setCurrentStep(3); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-icon-wrapper">
+              <div className="brand-icon" style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-sm)' }}>
                 <IconWind />
               </div>
-              <h3 className="modal-title">🚪 Accès au local</h3>
+              <h3 className="modal-title" style={{ fontSize: '1.05rem' }}>🚪 Accès au local</h3>
             </div>
             
             <div className="modal-body">
@@ -1652,8 +1657,7 @@ function App() {
                                       </span>
                                       <input 
                                         type="file" 
-                                        accept="image/*;capture=camera" 
-                                        capture="environment"
+                                        accept="image/*" 
                                         style={{ display: 'none' }} 
                                         onChange={handleEditPhotoUpload}
                                         disabled={isCompressing}
@@ -1833,8 +1837,7 @@ function App() {
                                 </span>
                                 <input 
                                   type="file" 
-                                  accept="image/*;capture=camera" 
-                                  capture="environment"
+                                  accept="image/*" 
                                   style={{ display: 'none' }} 
                                   onChange={handlePhotoUpload}
                                   disabled={isCompressing}
@@ -2182,8 +2185,7 @@ function App() {
                           </span>
                           <input 
                             type="file" 
-                            accept="image/*;capture=camera" 
-                            capture="environment"
+                            accept="image/*" 
                             style={{ display: 'none' }} 
                             onChange={handleEditPhotoUpload}
                             disabled={isCompressing}

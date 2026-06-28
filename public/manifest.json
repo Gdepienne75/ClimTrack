@@ -1,0 +1,17 @@
+{
+  "short_name": "ClimTrack",
+  "name": "ClimTrack - Inventaire Climatiseurs",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./",
+  "background_color": "#F8F9FA",
+  "theme_color": "#6750A4",
+  "display": "standalone",
+  "orientation": "portrait"
+}
