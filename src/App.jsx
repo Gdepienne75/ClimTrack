@@ -79,6 +79,14 @@ function App() {
   const [filterSite, setFilterSite] = useState('');
   const [filterType, setFilterType] = useState('');
 
+  // Editing Climatiseur states
+  const [editingClimId, setEditingClimId] = useState(null);
+  const [editClimNumber, setEditClimNumber] = useState('');
+  const [editClimType, setEditClimType] = useState('monobloc');
+  const [editClimPower, setEditClimPower] = useState('');
+  const [editClimDate, setEditClimDate] = useState('');
+  const [editClimPhoto, setEditClimPhoto] = useState(null);
+
   // Toast message
   const [toastMessage, setToastMessage] = useState('');
   const [supabaseError, setSupabaseError] = useState(null);
@@ -638,6 +646,97 @@ function App() {
     }
   };
 
+  // Start editing mode for a specific AC unit
+  const startEditing = (clim) => {
+    setEditingClimId(clim.id);
+    setEditClimNumber(clim.numero);
+    setEditClimType(clim.type);
+    setEditClimPower(clim.puissance || '');
+    setEditClimDate(clim.date_pose);
+    setEditClimPhoto(clim.photo_url || null);
+  };
+
+  // Handle edit form photo upload & compression
+  const handleEditPhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsCompressing(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const compressedBase64 = await compressImage(event.target.result);
+        setEditClimPhoto(compressedBase64);
+      } catch (err) {
+        console.error("Image compression error:", err);
+        setEditClimPhoto(event.target.result);
+      } finally {
+        setIsCompressing(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Submit AC unit modifications to Supabase
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editClimNumber.trim() || !editClimDate) {
+      alert("Veuillez remplir les champs obligatoires (*)");
+      return;
+    }
+
+    try {
+      setIsCompressing(true);
+      let photoUrl = editClimPhoto;
+
+      // If photo changed to a new base64 image (not already a URL)
+      if (editClimPhoto && editClimPhoto.startsWith('data:image')) {
+        const fileBlob = base64ToBlob(editClimPhoto);
+        const fileName = `clim_${editClimNumber.trim().replace(/\s+/g, '_')}_${Date.now()}.jpg`;
+
+        const { data: uploadData, error: uploadError } = await supabase
+          .storage
+          .from('climatiseur-photos')
+          .upload(fileName, fileBlob, {
+            contentType: 'image/jpeg',
+            upsert: true
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase
+          .storage
+          .from('climatiseur-photos')
+          .getPublicUrl(fileName);
+
+        photoUrl = publicUrlData.publicUrl;
+      }
+
+      // Update in Supabase
+      const { error } = await supabase
+        .from('climatiseurs')
+        .update({
+          numero: editClimNumber.trim(),
+          type: editClimType,
+          puissance: editClimPower ? parseInt(editClimPower, 10) : null,
+          date_pose: editClimDate,
+          photo_url: photoUrl
+        })
+        .eq('id', editingClimId);
+
+      if (error) throw error;
+
+      triggerToast("Fiche technique mise à jour !");
+      setEditingClimId(null);
+      await loadData();
+    } catch (err) {
+      console.error("Error editing climatiseur:", err);
+      alert("Erreur lors de la mise à jour.");
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
   // Dynamic site filter suggestions built from the registered climatiseurs
   const getSitesSuggestions = () => {
     const list = climatiseurs.map(c => c.site);
@@ -1033,7 +1132,12 @@ function App() {
 
                 {/* KPI Metrics */}
                 <div className="stats-grid">
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => {
+                    setCurrentTab('report');
+                    setFilterSite('');
+                    setFilterType('');
+                    setSearchQuery('');
+                  }}>
                     <div className="stat-icon-box">
                       <IconWind />
                     </div>
@@ -1043,7 +1147,12 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => {
+                    setCurrentTab('report');
+                    setFilterSite('');
+                    setFilterType('monobloc');
+                    setSearchQuery('');
+                  }}>
                     <div className="stat-icon-box" style={{ background: '#f0fdf4', color: '#16a34a' }}>
                       <IconCheck />
                     </div>
@@ -1053,7 +1162,12 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => {
+                    setCurrentTab('report');
+                    setFilterSite('');
+                    setFilterType('split');
+                    setSearchQuery('');
+                  }}>
                     <div className="stat-icon-box" style={{ background: '#eff6ff', color: '#3b82f6' }}>
                       <IconList />
                     </div>
@@ -1063,7 +1177,12 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => {
+                    setCurrentTab('report');
+                    setFilterSite('');
+                    setFilterType('');
+                    setSearchQuery('');
+                  }}>
                     <div className="stat-icon-box" style={{ background: '#fef3c7', color: '#d97706' }}>
                       <IconMapPin />
                     </div>
@@ -1451,52 +1570,169 @@ function App() {
                           Appareil(s) actuellement installé(s) dans ce local :
                         </p>
 
-                        {getClimsInSelectedLocation().map((clim) => (
-                          <div key={clim.id} className="fiche-grid">
-                            <div className="fiche-details">
-                              <div className="detail-item">
-                                <span className="detail-label">N° Climatiseur</span>
-                                <span className="detail-value text-highlight">{clim.numero}</span>
-                              </div>
-                              <div className="detail-item">
-                                <span className="detail-label">Type</span>
-                                <span className="detail-value">
-                                  <span className={`fiche-badge ${clim.type}`}>
-                                    {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
-                                  </span>
-                                </span>
-                              </div>
-                              <div className="detail-item">
-                                <span className="detail-label">Puissance</span>
-                                <span className="detail-value">{clim.puissance ? `${clim.puissance} W` : '-'}</span>
-                              </div>
-                              <div className="detail-item">
-                                <span className="detail-label">Date de pose</span>
-                                <span className="detail-value">{formatDateFR(clim.date_pose)}</span>
-                              </div>
-                              <div className="detail-item">
-                                <span className="detail-label">Ajouté le</span>
-                                <span className="detail-value">{formatDateFR(clim.date_ajout)}</span>
-                              </div>
-                              <div className="detail-item" style={{ justifyContent: 'center' }}>
-                                <button className="btn btn-danger" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }} onClick={() => handleDelete(clim.id)}>
-                                  <IconTrash /> Supprimer
-                                </button>
-                              </div>
-                            </div>
-                            
-                            <div className="fiche-photo">
-                              {clim.photo_url ? (
-                                <img src={clim.photo_url} alt={`Climatiseur ${clim.numero}`} />
-                              ) : (
-                                <div className="fiche-no-photo">
-                                  <IconCamera />
-                                  <span>Aucune photo</span>
+                        {getClimsInSelectedLocation().map((clim) => {
+                          if (editingClimId === clim.id) {
+                            return (
+                              <form key={clim.id} onSubmit={handleSaveEdit} className="edit-card-form">
+                                <h3 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--primary)', marginBottom: '0.25rem' }}>
+                                  ✏️ Modifier la fiche climatiseur
+                                </h3>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                                  <div className="form-group">
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Numéro du climatiseur *</label>
+                                    <input 
+                                      type="text" 
+                                      className="input-control no-icon"
+                                      value={editClimNumber}
+                                      onChange={(e) => setEditClimNumber(e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                  <div className="form-group">
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Type de climatiseur</label>
+                                    <select 
+                                      className="input-control no-icon"
+                                      value={editClimType}
+                                      onChange={(e) => setEditClimType(e.target.value)}
+                                    >
+                                      <option value="monobloc">Monobloc</option>
+                                      <option value="split">Split</option>
+                                    </select>
+                                  </div>
+                                  <div className="form-group">
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Puissance (Watts)</label>
+                                    <input 
+                                      type="number" 
+                                      className="input-control no-icon"
+                                      value={editClimPower}
+                                      onChange={(e) => setEditClimPower(e.target.value)}
+                                      placeholder="Ex: 3500"
+                                    />
+                                  </div>
+                                  <div className="form-group">
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Date de pose *</label>
+                                    <input 
+                                      type="date" 
+                                      className="input-control no-icon"
+                                      value={editClimDate}
+                                      onChange={(e) => setEditClimDate(e.target.value)}
+                                      required
+                                    />
+                                  </div>
                                 </div>
-                              )}
+
+                                <div className="form-group" style={{ marginTop: '0.25rem' }}>
+                                  <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Photo de l'appareil</label>
+                                  {editClimPhoto ? (
+                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', background: 'white', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
+                                      <div className="upload-preview" style={{ width: '80px', height: '80px', margin: 0 }}>
+                                        <img src={editClimPhoto} alt="Prévisualisation" />
+                                      </div>
+                                      <button 
+                                        type="button" 
+                                        className="btn btn-danger btn-sm"
+                                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', height: 'fit-content' }}
+                                        onClick={() => setEditClimPhoto(null)}
+                                      >
+                                        Supprimer la photo
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label className="upload-area" style={{ padding: '1rem', borderStyle: 'dashed' }}>
+                                      <span className="upload-icon" style={{ fontSize: '1.25rem' }}>
+                                        {isCompressing ? "..." : <IconCamera />}
+                                      </span>
+                                      <span style={{ fontSize: '0.8rem', fontWeight: '500' }}>
+                                        {isCompressing ? "Compression en cours..." : "Prendre une photo (Appareil photo) ou choisir un fichier"}
+                                      </span>
+                                      <input 
+                                        type="file" 
+                                        accept="image/*;capture=camera" 
+                                        capture="environment"
+                                        style={{ display: 'none' }} 
+                                        onChange={handleEditPhotoUpload}
+                                        disabled={isCompressing}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+
+                                <div className="btn-group" style={{ justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                                  <button type="submit" className="btn btn-primary btn-sm" disabled={isCompressing}>
+                                    Sauvegarder
+                                  </button>
+                                  <button 
+                                    type="button" 
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => setEditingClimId(null)}
+                                    disabled={isCompressing}
+                                  >
+                                    Annuler
+                                  </button>
+                                </div>
+                              </form>
+                            );
+                          }
+
+                          return (
+                            <div key={clim.id} className="fiche-grid">
+                              <div className="fiche-details">
+                                <div className="detail-item">
+                                  <span className="detail-label">N° Climatiseur</span>
+                                  <span className="detail-value text-highlight">{clim.numero}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Type</span>
+                                  <span className="detail-value">
+                                    <span className={`fiche-badge ${clim.type}`}>
+                                      {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                    </span>
+                                  </span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Puissance</span>
+                                  <span className="detail-value">{clim.puissance ? `${clim.puissance} W` : '-'}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Date de pose</span>
+                                  <span className="detail-value">{formatDateFR(clim.date_pose)}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Ajouté le</span>
+                                  <span className="detail-value">{formatDateFR(clim.date_ajout)}</span>
+                                </div>
+                                <div className="detail-item" style={{ justifyContent: 'flex-start', gap: '0.5rem', marginTop: '0.75rem' }}>
+                                  <button 
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+                                    onClick={() => startEditing(clim)}
+                                  >
+                                    ✏️ Modifier
+                                  </button>
+                                  <button 
+                                    className="btn btn-danger" 
+                                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }} 
+                                    onClick={() => handleDelete(clim.id)}
+                                  >
+                                    <IconTrash /> Supprimer
+                                  </button>
+                                </div>
+                              </div>
+                              
+                              <div className="fiche-photo">
+                                {clim.photo_url ? (
+                                  <img src={clim.photo_url} alt={`Climatiseur ${clim.numero}`} />
+                                ) : (
+                                  <div className="fiche-no-photo">
+                                    <IconCamera />
+                                    <span>Aucune photo</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
 
                         <div className="btn-group">
                           <button 
@@ -1694,52 +1930,118 @@ function App() {
                   </button>
                 </div>
 
-                {/* Inventory Table */}
+                {/* Inventory View: Desktop Table & Mobile Cards */}
                 {getSortedClimatiseurs().length > 0 ? (
-                  <div className="table-container">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Site</th>
-                          <th>Bâtiment</th>
-                          <th>Niveau</th>
-                          <th>Localisation</th>
-                          <th>N° Climatiseur</th>
-                          <th>Type</th>
-                          <th>Puissance</th>
-                          <th>Date de Pose</th>
-                          <th style={{ width: '60px', textAlign: 'center' }}>Suppr.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getSortedClimatiseurs().map((clim) => (
-                          <tr key={clim.id}>
-                            <td data-label="Site">{clim.site}</td>
-                            <td data-label="Bâtiment">{clim.batiment}</td>
-                            <td data-label="Niveau">{clim.etage}</td>
-                            <td data-label="Localisation" className="text-highlight">{clim.localisation}</td>
-                            <td data-label="N° Climatiseur" className="text-highlight">{clim.numero}</td>
-                            <td data-label="Type">
+                  <>
+                    {/* Desktop table */}
+                    <div className="table-container desktop-only">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Photo</th>
+                            <th>Site</th>
+                            <th>Bâtiment</th>
+                            <th>Niveau</th>
+                            <th>Localisation</th>
+                            <th>N° Climatiseur</th>
+                            <th>Type</th>
+                            <th>Puissance</th>
+                            <th>Date de Pose</th>
+                            <th style={{ width: '60px', textAlign: 'center' }}>Suppr.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getSortedClimatiseurs().map((clim) => (
+                            <tr key={clim.id}>
+                              <td data-label="Photo">
+                                {clim.photo_url ? (
+                                  <img 
+                                    src={clim.photo_url} 
+                                    className="table-thumb" 
+                                    alt="Miniature" 
+                                    onClick={() => window.open(clim.photo_url, '_blank')} 
+                                  />
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Aucune</span>
+                                )}
+                              </td>
+                              <td data-label="Site">{clim.site}</td>
+                              <td data-label="Bâtiment">{clim.batiment}</td>
+                              <td data-label="Niveau">{clim.etage}</td>
+                              <td data-label="Localisation" className="text-highlight">{clim.localisation}</td>
+                              <td data-label="N° Climatiseur" className="text-highlight">{clim.numero}</td>
+                              <td data-label="Type">
+                                <span className={`fiche-badge ${clim.type}`}>
+                                  {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                </span>
+                              </td>
+                              <td data-label="Puissance">{clim.puissance ? `${clim.puissance} W` : '-'}</td>
+                              <td data-label="Date de Pose">{formatDateFR(clim.date_pose)}</td>
+                              <td data-label="Actions" style={{ textAlign: 'center' }}>
+                                <button 
+                                  className="btn btn-danger" 
+                                  style={{ width: '28px', height: '28px', padding: 0 }}
+                                  onClick={() => handleDelete(clim.id)}
+                                >
+                                  <IconTrash />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile cards layout */}
+                    <div className="mobile-only report-cards-grid">
+                      {getSortedClimatiseurs().map((clim) => (
+                        <div key={clim.id} className="report-card">
+                          {clim.photo_url && (
+                            <div 
+                              className="report-card-image" 
+                              style={{ backgroundImage: `url(${clim.photo_url})`, cursor: 'pointer' }}
+                              onClick={() => window.open(clim.photo_url, '_blank')}
+                            />
+                          )}
+                          <div className="report-card-content">
+                            <div className="report-card-header">
+                              <span className="report-card-num">N° {clim.numero}</span>
                               <span className={`fiche-badge ${clim.type}`}>
                                 {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
                               </span>
-                            </td>
-                            <td data-label="Puissance">{clim.puissance ? `${clim.puissance} W` : '-'}</td>
-                            <td data-label="Date de Pose">{formatDateFR(clim.date_pose)}</td>
-                            <td data-label="Actions" style={{ textAlign: 'center' }}>
+                            </div>
+                            
+                            <div className="report-card-body">
+                              <div className="report-card-row">
+                                <span className="report-card-label">📍 Emplacement</span>
+                                <span className="report-card-value">
+                                  {clim.site} • {clim.batiment} ({clim.etage}) • {clim.localisation}
+                                </span>
+                              </div>
+                              <div className="report-card-row">
+                                <span className="report-card-label">⚡ Puissance</span>
+                                <span className="report-card-value">{clim.puissance ? `${clim.puissance} W` : '-'}</span>
+                              </div>
+                              <div className="report-card-row">
+                                <span className="report-card-label">📅 Date de pose</span>
+                                <span className="report-card-value">{formatDateFR(clim.date_pose)}</span>
+                              </div>
+                            </div>
+
+                            <div className="report-card-footer">
                               <button 
-                                className="btn btn-danger" 
-                                style={{ width: '28px', height: '28px', padding: 0 }}
+                                className="btn btn-danger btn-sm" 
+                                style={{ width: '100%' }}
                                 onClick={() => handleDelete(clim.id)}
                               >
-                                <IconTrash />
+                                <IconTrash /> Supprimer
                               </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <div className="empty-state">
                     <div className="empty-icon">
