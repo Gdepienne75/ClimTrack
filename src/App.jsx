@@ -39,7 +39,16 @@ function App() {
 
   // Database records loaded from Supabase
   const [climatiseurs, setClimatiseurs] = useState([]);
-  const [locaux, setLocaux] = useState([]);
+  
+  // Dashboard states (optimized counters)
+  const [stats, setStats] = useState({ total: 0, monobloc: 0, split: 0, equippedRooms: 0 });
+  const [recentClimatiseurs, setRecentClimatiseurs] = useState([]);
+
+  // Lazy Loaded Tree states
+  const [sites, setSites] = useState([]);
+  const [buildingsBySite, setBuildingsBySite] = useState({});
+  const [floorsByBuilding, setFloorsByBuilding] = useState({});
+  const [roomsByFloor, setRoomsByFloor] = useState({});
   
   // Step Flow states for adding a Climatiseur
   const [currentStep, setCurrentStep] = useState(0); 
@@ -62,6 +71,7 @@ function App() {
   const [addingNode, setAddingNode] = useState(null); // { parentKey, type, site, batiment, etage }
   const [newNodeValue, setNewNodeValue] = useState('');
   const [treeSearchQuery, setTreeSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
   const [showEntryModal, setShowEntryModal] = useState(false);
 
   // Filter/Search states in reports
@@ -101,48 +111,112 @@ function App() {
 
     try {
       setSupabaseError(null);
-      // 1. Fetch climatiseurs
-      const { data: climsData, error: climsError } = await supabase
+
+      // 1. Fetch counts (efficiently without downloading all rows)
+      const { count: total, error: errTotal } = await supabase
         .from('climatiseurs')
-        .select('*');
-      
-      if (climsError) {
-        if (climsError.message && (climsError.message.includes('relation') || climsError.message.includes('does not exist'))) {
-          throw new Error("La table 'climatiseurs' n'existe pas dans votre projet Supabase. Veuillez l'ajouter en exécutant le script SQL fourni dans le guide.");
+        .select('*', { count: 'exact', head: true });
+      if (errTotal) throw errTotal;
+
+      const { count: monobloc, error: errMono } = await supabase
+        .from('climatiseurs')
+        .select('*', { count: 'exact', head: true })
+        .eq('type', 'monobloc');
+      if (errMono) throw errMono;
+
+      const { count: split, error: errSplit } = await supabase
+        .from('climatiseurs')
+        .select('*', { count: 'exact', head: true })
+        .eq('type', 'split');
+      if (errSplit) throw errSplit;
+
+      // Equipped rooms count (we download just the location fields of climatiseurs, which is tiny)
+      const { data: climLocs, error: errLocs } = await supabase
+        .from('climatiseurs')
+        .select('site,batiment,etage,localisation');
+      if (errLocs) throw errLocs;
+
+      const uniqueEquipped = Array.from(new Set(
+        (climLocs || []).map(c => `${c.site}|${c.batiment}|${c.etage}|${c.localisation}`)
+      )).length;
+
+      setStats({
+        total: total || 0,
+        monobloc: monobloc || 0,
+        split: split || 0,
+        equippedRooms: uniqueEquipped
+      });
+
+      // 2. Fetch the 5 most recent installations
+      const { data: recents, error: errRecents } = await supabase
+        .from('climatiseurs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (errRecents) throw errRecents;
+      setRecentClimatiseurs(recents || []);
+
+      // 3. Fetch all climatiseurs paginated (for inventory PDF report)
+      await loadAllClimatiseurs();
+
+      // 4. Fetch unique sites from the view
+      const { data: sitesData, error: errSites } = await supabase
+        .from('view_sites')
+        .select('site');
+
+      if (errSites) {
+        if (errSites.message && (errSites.message.includes('relation') || errSites.message.includes('does not exist'))) {
+          throw new Error("Les vues SQL requises n'ont pas été trouvées. Veuillez exécuter le script de création de vues fourni dans le guide walkthrough.md dans l'onglet SQL Editor de Supabase.");
         }
-        throw climsError;
-      }
-      setClimatiseurs(climsData || []);
-
-      // 2. Fetch locations hierarchy (locaux)
-      const { data: locauxData, error: locauxError } = await supabase
-        .from('locaux')
-        .select('*');
-
-      if (locauxError) {
-        if (locauxError.message && (locauxError.message.includes('relation') || locauxError.message.includes('does not exist'))) {
-          throw new Error("La table 'locaux' n'existe pas dans votre projet Supabase. Veuillez l'ajouter en exécutant le script SQL fourni dans le guide.");
-        }
-        throw locauxError;
+        throw errSites;
       }
 
-      // Seed default locations if the database table is brand new and empty
-      if (!locauxData || locauxData.length === 0) {
+      if (!sitesData || sitesData.length === 0) {
+        // Table is empty, seed it!
         await seedDefaultLocaux();
       } else {
-        setLocaux(locauxData);
+        setSites(sitesData.map(s => s.site));
       }
+
     } catch (err) {
-      console.error("Erreur lors du chargement des données Supabase:", err);
+      console.error("Erreur de chargement Supabase:", err);
       let msg = err.message || "Erreur de connexion. Vérifiez vos tables PostgreSQL et vos clés API.";
       if (err.status === 404 || (err.message && err.message.includes('404')) || (err.message && err.message.includes('relation') && err.message.includes('not found'))) {
-        msg = "Erreur 404 de l'API Supabase. Les tables SQL 'locaux' ou 'climatiseurs' n'ont pas été trouvées. Veuillez vous connecter à votre console Supabase, ouvrir l'onglet 'SQL Editor' et exécuter le script de création de tables fourni dans le guide walkthrough.md.";
+        msg = "Erreur de liaison Supabase. Veuillez vous connecter à votre console Supabase, ouvrir l'onglet 'SQL Editor' et exécuter le script de création de tables et de vues SQL fourni dans le guide walkthrough.md.";
       }
       setSupabaseError(msg);
     }
   };
 
-  // Pre-populate Supabase table with sample locations
+  // Helper to fetch all climatiseurs using page pagination (bypasses 1000 limit)
+  const loadAllClimatiseurs = async () => {
+    try {
+      let all = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('climatiseurs')
+          .select('*')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          all = [...all, ...data];
+          hasMore = data.length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
+      setClimatiseurs(all);
+    } catch (err) {
+      console.error("Error loading all climatiseurs:", err);
+    }
+  };
+
   const seedDefaultLocaux = async () => {
     const seeds = [
       { site: "Site Principal (Paris)", batiment: "Bâtiment A - Administration", etage: "RDC", localisation: "Accueil" },
@@ -162,37 +236,112 @@ function App() {
         .select();
 
       if (error) throw error;
-      if (data) {
-        setLocaux(data);
+      
+      // Reload sites list from view after seeding
+      const { data: sitesData } = await supabase
+        .from('view_sites')
+        .select('site');
+      if (sitesData) {
+        setSites(sitesData.map(s => s.site));
       }
     } catch (err) {
       console.error("Erreur de peuplement initial de la table locaux:", err);
     }
   };
-  // Group locaux to build tree
-  const buildHierarchy = () => {
-    const hierarchy = {};
-    const filteredLocaux = getFilteredLocaux();
-    filteredLocaux.forEach(item => {
-      if (!hierarchy[item.site]) hierarchy[item.site] = {};
-      if (!hierarchy[item.site][item.batiment]) hierarchy[item.site][item.batiment] = {};
-      if (!hierarchy[item.site][item.batiment][item.etage]) hierarchy[item.site][item.batiment][item.etage] = [];
-      if (!hierarchy[item.site][item.batiment][item.etage].includes(item.localisation)) {
-        hierarchy[item.site][item.batiment][item.etage].push(item.localisation);
+
+  // Lazy node toggle loader
+  const toggleNode = async (key, type, params = {}) => {
+    const isExpanded = !!expandedNodes[key];
+    
+    // Toggle expand state
+    setExpandedNodes(prev => ({
+      ...prev,
+      [key]: !isExpanded
+    }));
+
+    // Lazy load children on demand when expanding
+    if (!isExpanded) {
+      try {
+        if (type === 'site') {
+          const { site } = params;
+          if (!buildingsBySite[site]) {
+            const { data, error } = await supabase
+              .from('view_batiments')
+              .select('batiment')
+              .eq('site', site);
+            if (error) throw error;
+            setBuildingsBySite(prev => ({
+              ...prev,
+              [site]: data ? data.map(b => b.batiment) : []
+            }));
+          }
+        } else if (type === 'batiment') {
+          const { site, batiment } = params;
+          const parentKey = `${site}|${batiment}`;
+          if (!floorsByBuilding[parentKey]) {
+            const { data, error } = await supabase
+              .from('view_etages')
+              .select('etage')
+              .eq('site', site)
+              .eq('batiment', batiment);
+            if (error) throw error;
+            setFloorsByBuilding(prev => ({
+              ...prev,
+              [parentKey]: data ? data.map(f => f.etage) : []
+            }));
+          }
+        } else if (type === 'etage') {
+          const { site, batiment, etage } = params;
+          const parentKey = `${site}|${batiment}|${etage}`;
+          if (!roomsByFloor[parentKey]) {
+            const { data, error } = await supabase
+              .from('locaux')
+              .select('localisation')
+              .eq('site', site)
+              .eq('batiment', batiment)
+              .eq('etage', etage)
+              .limit(1000); // safety cap
+            if (error) throw error;
+            setRoomsByFloor(prev => ({
+              ...prev,
+              [parentKey]: data ? data.map(r => r.localisation) : []
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement des sous-nœuds:", err);
       }
-    });
-    return hierarchy;
+    }
   };
 
-  const getFilteredLocaux = () => {
-    if (!treeSearchQuery.trim()) return locaux;
-    const q = treeSearchQuery.toLowerCase();
-    return locaux.filter(item => 
-      item.site.toLowerCase().includes(q) ||
-      item.batiment.toLowerCase().includes(q) ||
-      item.etage.toLowerCase().includes(q) ||
-      item.localisation.toLowerCase().includes(q)
-    );
+  // Server-side debounced search for large amounts of records
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      performTreeSearch();
+    }, 400);
+
+    return () => clearTimeout(delayDebounce);
+  }, [treeSearchQuery]);
+
+  const performTreeSearch = async () => {
+    const q = treeSearchQuery.trim();
+    if (!q) {
+      setSearchResults(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('locaux')
+        .select('*')
+        .or(`site.ilike.%${q}%,batiment.ilike.%${q}%,etage.ilike.%${q}%,localisation.ilike.%${q}%`)
+        .limit(100); // cap to 100 results for layout ergonomics and speed
+
+      if (error) throw error;
+      setSearchResults(data || []);
+    } catch (err) {
+      console.error("Erreur lors de la recherche serveur:", err);
+    }
   };
 
   const handleAddNodeConfirm = async (e) => {
@@ -239,15 +388,42 @@ function App() {
         .select();
 
       if (error) throw error;
-      if (data) {
-        setLocaux(prev => [...prev, ...data]);
-        
-        // Auto-expand the parent node so the new item is visible immediately
+      if (data && data[0]) {
+        // Dynamically append the created node to our lazy loading states so it displays instantly!
+        if (addingNode.type === 'site') {
+          setSites(prev => {
+            const next = [...prev];
+            if (!next.includes(val)) next.push(val);
+            return next.sort();
+          });
+        } else if (addingNode.type === 'batiment') {
+          const { site } = addingNode;
+          setBuildingsBySite(prev => ({
+            ...prev,
+            [site]: [...(prev[site] || []), val].sort()
+          }));
+        } else if (addingNode.type === 'etage') {
+          const { site, batiment } = addingNode;
+          const key = `${site}|${batiment}`;
+          setFloorsByBuilding(prev => ({
+            ...prev,
+            [key]: [...(prev[key] || []), val].sort()
+          }));
+        } else if (addingNode.type === 'localisation') {
+          const { site, batiment, etage } = addingNode;
+          const key = `${site}|${batiment}|${etage}`;
+          setRoomsByFloor(prev => ({
+            ...prev,
+            [key]: [...(prev[key] || []), val].sort()
+          }));
+        }
+
+        // Auto-expand the parent node so they see the new item
         setExpandedNodes(prev => ({
           ...prev,
           [addingNode.parentKey]: true
         }));
-        
+
         triggerToast(`Nouveau lieu "${val}" enregistré !`);
       }
     } catch (err) {
@@ -258,33 +434,6 @@ function App() {
       setNewNodeValue('');
     }
   };
-
-  const toggleNode = (key) => {
-    setExpandedNodes(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
-  useEffect(() => {
-    if (treeSearchQuery.trim()) {
-      const q = treeSearchQuery.toLowerCase();
-      const autoExpanded = {};
-      locaux.forEach(item => {
-        if (
-          item.site.toLowerCase().includes(q) ||
-          item.batiment.toLowerCase().includes(q) ||
-          item.etage.toLowerCase().includes(q) ||
-          item.localisation.toLowerCase().includes(q)
-        ) {
-          autoExpanded[`site:${item.site}`] = true;
-          autoExpanded[`site:${item.site}|bat:${item.batiment}`] = true;
-          autoExpanded[`site:${item.site}|bat:${item.batiment}|floor:${item.etage}`] = true;
-        }
-      });
-      setExpandedNodes(autoExpanded);
-    }
-  }, [treeSearchQuery, locaux]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -402,15 +551,19 @@ function App() {
         photoUrl = publicUrlData.publicUrl;
       }
 
-      // 2. Add location to locaux DB table if it does not exist yet (custom text input)
-      const locExists = locaux.some(l => 
-        l.site === selectedSite &&
-        l.batiment === selectedBuilding &&
-        l.etage === selectedFloor &&
-        l.localisation === selectedLocation
-      );
+      // 2. Add location to locaux DB table if it does not exist yet (database check)
+      const { data: existingLoc, error: checkErr } = await supabase
+        .from('locaux')
+        .select('id')
+        .eq('site', selectedSite)
+        .eq('batiment', selectedBuilding)
+        .eq('etage', selectedFloor)
+        .eq('localisation', selectedLocation)
+        .limit(1);
 
-      if (!locExists) {
+      if (checkErr) throw checkErr;
+
+      if (!existingLoc || existingLoc.length === 0) {
         const { data: newLocData, error: newLocError } = await supabase
           .from('locaux')
           .insert({
@@ -422,9 +575,13 @@ function App() {
           .select();
 
         if (newLocError) throw newLocError;
-        if (newLocData) {
-          setLocaux(prev => [...prev, ...newLocData]);
-        }
+        
+        // Dynamically add to local lazy tree cache if needed
+        const key = `${selectedSite}|${selectedBuilding}|${selectedFloor}`;
+        setRoomsByFloor(prev => ({
+          ...prev,
+          [key]: [...(prev[key] || []), selectedLocation].sort()
+        }));
       }
 
       // 3. Add climatiseur record to database
@@ -481,29 +638,10 @@ function App() {
     }
   };
 
-  // Dynamic lists suggestions built directly from the `locaux` table records
+  // Dynamic site filter suggestions built from the registered climatiseurs
   const getSitesSuggestions = () => {
-    const list = locaux.map(l => l.site);
-    return Array.from(new Set(list)).filter(s => s);
-  };
-
-  const getBuildingsSuggestions = () => {
-    const list = locaux.filter(l => l.site === selectedSite).map(l => l.batiment);
-    return Array.from(new Set(list)).filter(b => b);
-  };
-
-  const getFloorsSuggestions = () => {
-    const list = locaux.filter(l => l.site === selectedSite && l.batiment === selectedBuilding).map(l => l.etage);
-    return Array.from(new Set(list)).filter(f => f);
-  };
-
-  const getLocationsSuggestions = () => {
-    const list = locaux.filter(l => 
-      l.site === selectedSite && 
-      l.batiment === selectedBuilding && 
-      l.etage === selectedFloor
-    ).map(l => l.localisation);
-    return Array.from(new Set(list)).filter(loc => loc);
+    const list = climatiseurs.map(c => c.site);
+    return Array.from(new Set(list)).filter(s => s).sort();
   };
 
   // Sort and filter list for reports
@@ -900,7 +1038,7 @@ function App() {
                       <IconWind />
                     </div>
                     <div className="stat-data">
-                      <span className="stat-number">{climatiseurs.length}</span>
+                      <span className="stat-number">{stats.total}</span>
                       <span className="stat-label">Total climatiseurs</span>
                     </div>
                   </div>
@@ -910,9 +1048,7 @@ function App() {
                       <IconCheck />
                     </div>
                     <div className="stat-data">
-                      <span className="stat-number">
-                        {climatiseurs.filter(c => c.type === 'monobloc').length}
-                      </span>
+                      <span className="stat-number">{stats.monobloc}</span>
                       <span className="stat-label">Monoblocs</span>
                     </div>
                   </div>
@@ -922,9 +1058,7 @@ function App() {
                       <IconList />
                     </div>
                     <div className="stat-data">
-                      <span className="stat-number">
-                        {climatiseurs.filter(c => c.type === 'split').length}
-                      </span>
+                      <span className="stat-number">{stats.split}</span>
                       <span className="stat-label">Splits</span>
                     </div>
                   </div>
@@ -934,9 +1068,7 @@ function App() {
                       <IconMapPin />
                     </div>
                     <div className="stat-data">
-                      <span className="stat-number">
-                        {Array.from(new Set(climatiseurs.map(c => `${c.site}-${c.batiment}-${c.etage}-${c.localisation}`))).length}
-                      </span>
+                      <span className="stat-number">{stats.equippedRooms}</span>
                       <span className="stat-label">Locaux équipés</span>
                     </div>
                   </div>
@@ -950,26 +1082,23 @@ function App() {
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Historique récent</span>
                     </div>
                     <div className="card-body">
-                      {climatiseurs.length > 0 ? (
+                      {recentClimatiseurs.length > 0 ? (
                         <div className="activity-list">
-                          {[...climatiseurs]
-                            .sort((a, b) => b.created_at ? new Date(b.created_at) - new Date(a.created_at) : b.id - a.id)
-                            .slice(0, 5)
-                            .map((clim) => (
-                              <div key={clim.id} className="activity-item">
-                                <div className="activity-meta">
-                                  <span className="activity-title">
-                                    N° Clim : {clim.numero} ({clim.type === 'monobloc' ? 'Monobloc' : 'Split'})
-                                  </span>
-                                  <span className="activity-desc">
-                                    {clim.site} • {clim.batiment} • {clim.etage} • {clim.localisation}
-                                  </span>
-                                </div>
-                                <div className="activity-date">
-                                  <span>{formatDateFR(clim.date_pose)}</span>
-                                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Date de pose</div>
-                                </div>
+                          {recentClimatiseurs.map((clim) => (
+                            <div key={clim.id} className="activity-item">
+                              <div className="activity-meta">
+                                <span className="activity-title">
+                                  N° Clim : {clim.numero} ({clim.type === 'monobloc' ? 'Monobloc' : 'Split'})
+                                </span>
+                                <span className="activity-desc">
+                                  {clim.site} • {clim.batiment} • {clim.etage} • {clim.localisation}
+                                </span>
                               </div>
+                              <div className="activity-date">
+                                <span>{formatDateFR(clim.date_pose)}</span>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Date de pose</div>
+                              </div>
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -1067,27 +1196,56 @@ function App() {
                     )}
 
                     {/* Tree List */}
+                    {/* Tree List or Search Results */}
                     <div className="tree-list">
-                      {(() => {
-                        const hierarchy = buildHierarchy();
-                        const sites = Object.keys(hierarchy);
-                        if (sites.length === 0) {
-                          return (
-                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                              Aucun site enregistré. Cliquez sur "Nouveau Site" pour commencer.
+                      {searchResults !== null ? (
+                        /* SEARCH RESULTS VIEW */
+                        <div>
+                          <h4 style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                            Résultats de la recherche ({searchResults.length}) :
+                          </h4>
+                          {searchResults.length === 0 ? (
+                            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                              Aucun local ne correspond à votre recherche.
                             </div>
-                          );
-                        }
-
-                        return sites.map((site) => {
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {searchResults.map((res) => (
+                                <div 
+                                  key={res.id} 
+                                  className="tree-node"
+                                  style={{ border: '1px solid var(--border-light)', background: '#f8fafc', padding: '0.75rem' }}
+                                  onClick={() => {
+                                    setSelectedSite(res.site);
+                                    setSelectedBuilding(res.batiment);
+                                    setSelectedFloor(res.etage);
+                                    setSelectedLocation(res.localisation);
+                                    clearForm();
+                                    setShowEntryModal(true);
+                                  }}
+                                >
+                                  <span className="tree-node-label" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                                    🏢 {res.site} ➔ 🏠 {res.batiment} ➔ 📶 Niveau : {res.etage} ➔ <span style={{ color: 'var(--primary)' }}>📍 {res.localisation}</span>
+                                  </span>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    Entrer ➔
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* LAZY LOADED TREE VIEW */
+                        sites.map((site) => {
                           const siteKey = `site:${site}`;
-                          const isSiteExpanded = expandedNodes[siteKey];
-                          const buildings = Object.keys(hierarchy[site]);
+                          const isSiteExpanded = !!expandedNodes[siteKey];
+                          const buildings = buildingsBySite[site] || [];
 
                           return (
                             <div key={siteKey} className="tree-node-wrapper">
                               {/* Site Row */}
-                              <div className="tree-node" onClick={() => toggleNode(siteKey)}>
+                              <div className="tree-node" onClick={() => toggleNode(siteKey, 'site', { site })}>
                                 <span className="tree-node-label site">
                                   <span style={{ transform: isSiteExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
                                     <IconChevronRight />
@@ -1126,137 +1284,157 @@ function App() {
                                     </div>
                                   )}
 
-                                  {buildings.map((bat) => {
-                                    const batKey = `site:${site}|bat:${bat}`;
-                                    const isBatExpanded = expandedNodes[batKey];
-                                    const floors = Object.keys(hierarchy[site][bat]);
+                                  {buildings.length === 0 ? (
+                                    <div style={{ padding: '0.4rem', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                      Chargement...
+                                    </div>
+                                  ) : (
+                                    buildings.map((bat) => {
+                                      const batKey = `site:${site}|bat:${bat}`;
+                                      const isBatExpanded = !!expandedNodes[batKey];
+                                      const batParentKey = `${site}|${bat}`;
+                                      const floors = floorsByBuilding[batParentKey] || [];
 
-                                    return (
-                                      <div key={batKey} className="tree-node-wrapper">
-                                        {/* Building Row */}
-                                        <div className="tree-node" onClick={() => toggleNode(batKey)}>
-                                          <span className="tree-node-label batiment">
-                                            <span style={{ transform: isBatExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
-                                              <IconChevronRight />
+                                      return (
+                                        <div key={batKey} className="tree-node-wrapper">
+                                          {/* Building Row */}
+                                          <div className="tree-node" onClick={() => toggleNode(batKey, 'batiment', { site, batiment: bat })}>
+                                            <span className="tree-node-label batiment">
+                                              <span style={{ transform: isBatExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
+                                                <IconChevronRight />
+                                              </span>
+                                              🏠 {bat}
                                             </span>
-                                            🏠 {bat}
-                                          </span>
-                                          <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
-                                            <button 
-                                              className="tree-node-action-btn"
-                                              onClick={() => {
-                                                setAddingNode({ parentKey: batKey, type: 'etage', site, batiment: bat });
-                                                setNewNodeValue('');
-                                              }}
-                                            >
-                                              + Niveau
-                                            </button>
+                                            <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
+                                              <button 
+                                                className="tree-node-action-btn"
+                                                onClick={() => {
+                                                  setAddingNode({ parentKey: batKey, type: 'etage', site, batiment: bat });
+                                                  setNewNodeValue('');
+                                                }}
+                                              >
+                                                + Niveau
+                                              </button>
+                                            </div>
                                           </div>
-                                        </div>
 
-                                        {/* Building children */}
-                                        {isBatExpanded && (
-                                          <div className="tree-children">
-                                            {/* Add Floor Inline Input */}
-                                            {addingNode && addingNode.parentKey === batKey && addingNode.type === 'etage' && (
-                                              <div className="tree-node-input">
-                                                <input 
-                                                  type="text" 
-                                                  className="input-control" 
-                                                  placeholder="Nom du niveau (ex: RDC, Étage 1)..."
-                                                  value={newNodeValue}
-                                                  onChange={(e) => setNewNodeValue(e.target.value)}
-                                                  autoFocus
-                                                />
-                                                <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
-                                                <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
-                                              </div>
-                                            )}
+                                          {/* Building children */}
+                                          {isBatExpanded && (
+                                            <div className="tree-children">
+                                              {/* Add Floor Inline Input */}
+                                              {addingNode && addingNode.parentKey === batKey && addingNode.type === 'etage' && (
+                                                <div className="tree-node-input">
+                                                  <input 
+                                                    type="text" 
+                                                    className="input-control" 
+                                                    placeholder="Nom du niveau (ex: RDC, Étage 1)..."
+                                                    value={newNodeValue}
+                                                    onChange={(e) => setNewNodeValue(e.target.value)}
+                                                    autoFocus
+                                                  />
+                                                  <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
+                                                  <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
+                                                </div>
+                                              )}
 
-                                            {floors.map((floor) => {
-                                              const floorKey = `site:${site}|bat:${bat}|floor:${floor}`;
-                                              const isFloorExpanded = expandedNodes[floorKey];
-                                              const locations = hierarchy[site][bat][floor];
+                                              {floors.length === 0 ? (
+                                                <div style={{ padding: '0.4rem', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                                  Chargement...
+                                                </div>
+                                              ) : (
+                                                floors.map((floor) => {
+                                                  const floorKey = `site:${site}|bat:${bat}|floor:${floor}`;
+                                                  const isFloorExpanded = !!expandedNodes[floorKey];
+                                                  const floorParentKey = `${site}|${bat}|${floor}`;
+                                                  const locations = roomsByFloor[floorParentKey] || [];
 
-                                              return (
-                                                <div key={floorKey} className="tree-node-wrapper">
-                                                  {/* Floor Row */}
-                                                  <div className="tree-node" onClick={() => toggleNode(floorKey)}>
-                                                    <span className="tree-node-label etage">
-                                                      <span style={{ transform: isFloorExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
-                                                        <IconChevronRight />
-                                                      </span>
-                                                      📶 Niveau : {floor}
-                                                    </span>
-                                                    <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
-                                                      <button 
-                                                        className="tree-node-action-btn"
-                                                        onClick={() => {
-                                                          setAddingNode({ parentKey: floorKey, type: 'localisation', site, batiment: bat, etage: floor });
-                                                          setNewNodeValue('');
-                                                        }}
-                                                      >
-                                                        + Local
-                                                      </button>
-                                                    </div>
-                                                  </div>
-
-                                                  {/* Floor children */}
-                                                  {isFloorExpanded && (
-                                                    <div className="tree-children">
-                                                      {/* Add Location Inline Input */}
-                                                      {addingNode && addingNode.parentKey === floorKey && addingNode.type === 'localisation' && (
-                                                        <div className="tree-node-input">
-                                                          <input 
-                                                            type="text" 
-                                                            className="input-control" 
-                                                            placeholder="Nom du local (ex: Bureau 104)..."
-                                                            value={newNodeValue}
-                                                            onChange={(e) => setNewNodeValue(e.target.value)}
-                                                            autoFocus
-                                                          />
-                                                          <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
-                                                          <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
-                                                        </div>
-                                                      )}
-
-                                                      {locations.map((loc) => {
-                                                        const locKey = `site:${site}|bat:${bat}|floor:${floor}|loc:${loc}`;
-                                                        return (
-                                                          <div 
-                                                            key={locKey} 
-                                                            className="tree-node"
+                                                  return (
+                                                    <div key={floorKey} className="tree-node-wrapper">
+                                                      {/* Floor Row */}
+                                                      <div className="tree-node" onClick={() => toggleNode(floorKey, 'etage', { site, batiment: bat, etage: floor })}>
+                                                        <span className="tree-node-label etage">
+                                                          <span style={{ transform: isFloorExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
+                                                            <IconChevronRight />
+                                                          </span>
+                                                          📶 Niveau : {floor}
+                                                        </span>
+                                                        <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
+                                                          <button 
+                                                            className="tree-node-action-btn"
                                                             onClick={() => {
-                                                              setSelectedSite(site);
-                                                              setSelectedBuilding(bat);
-                                                              setSelectedFloor(floor);
-                                                              setSelectedLocation(loc);
-                                                              clearForm();
-                                                              setShowEntryModal(true);
+                                                              setAddingNode({ parentKey: floorKey, type: 'localisation', site, batiment: bat, etage: floor });
+                                                              setNewNodeValue('');
                                                             }}
                                                           >
-                                                            <span className="tree-node-label localisation">
-                                                              📍 {loc}
-                                                            </span>
-                                                          </div>
-                                                        );
-                                                      })}
+                                                            + Local
+                                                          </button>
+                                                        </div>
+                                                      </div>
+
+                                                      {/* Floor children */}
+                                                      {isFloorExpanded && (
+                                                        <div className="tree-children">
+                                                          {/* Add Location Inline Input */}
+                                                          {addingNode && addingNode.parentKey === floorKey && addingNode.type === 'localisation' && (
+                                                            <div className="tree-node-input">
+                                                              <input 
+                                                                type="text" 
+                                                                className="input-control" 
+                                                                placeholder="Nom du local (ex: Bureau 104)..."
+                                                                value={newNodeValue}
+                                                                onChange={(e) => setNewNodeValue(e.target.value)}
+                                                                autoFocus
+                                                              />
+                                                              <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
+                                                              <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
+                                                            </div>
+                                                          )}
+
+                                                          {locations.length === 0 ? (
+                                                            <div style={{ padding: '0.4rem', color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                                              Chargement...
+                                                            </div>
+                                                          ) : (
+                                                            locations.map((loc) => {
+                                                              const locKey = `site:${site}|bat:${bat}|floor:${floor}|loc:${loc}`;
+                                                              return (
+                                                                <div 
+                                                                  key={locKey} 
+                                                                  className="tree-node"
+                                                                  onClick={() => {
+                                                                    setSelectedSite(site);
+                                                                    setSelectedBuilding(bat);
+                                                                    setSelectedFloor(floor);
+                                                                    setSelectedLocation(loc);
+                                                                    clearForm();
+                                                                    setShowEntryModal(true);
+                                                                  }}
+                                                                >
+                                                                  <span className="tree-node-label localisation">
+                                                                    📍 {loc}
+                                                                  </span>
+                                                                </div>
+                                                              );
+                                                            })
+                                                          )}
+                                                        </div>
+                                                      )}
                                                     </div>
-                                                  )}
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
+                                                  );
+                                                })
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
                                 </div>
                               )}
                             </div>
                           );
-                        });
-                      })()}
+                        })
+                      )}
                     </div>
                   </>
                 ) : (
