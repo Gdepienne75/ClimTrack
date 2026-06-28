@@ -57,11 +57,11 @@ function App() {
   const [isCompressing, setIsCompressing] = useState(false);
   const [showAddFormOverride, setShowAddFormOverride] = useState(false); 
 
-  // Search queries for selection workflow steps
-  const [searchSiteQuery, setSearchSiteQuery] = useState('');
-  const [searchBuildingQuery, setSearchBuildingQuery] = useState('');
-  const [searchFloorQuery, setSearchFloorQuery] = useState('');
-  const [searchLocationQuery, setSearchLocationQuery] = useState('');
+  // Directory Tree View states
+  const [expandedNodes, setExpandedNodes] = useState({});
+  const [addingNode, setAddingNode] = useState(null); // { parentKey, type, site, batiment, etage }
+  const [newNodeValue, setNewNodeValue] = useState('');
+  const [treeSearchQuery, setTreeSearchQuery] = useState('');
   const [showEntryModal, setShowEntryModal] = useState(false);
 
   // Filter/Search states in reports
@@ -169,6 +169,122 @@ function App() {
       console.error("Erreur de peuplement initial de la table locaux:", err);
     }
   };
+  // Group locaux to build tree
+  const buildHierarchy = () => {
+    const hierarchy = {};
+    const filteredLocaux = getFilteredLocaux();
+    filteredLocaux.forEach(item => {
+      if (!hierarchy[item.site]) hierarchy[item.site] = {};
+      if (!hierarchy[item.site][item.batiment]) hierarchy[item.site][item.batiment] = {};
+      if (!hierarchy[item.site][item.batiment][item.etage]) hierarchy[item.site][item.batiment][item.etage] = [];
+      if (!hierarchy[item.site][item.batiment][item.etage].includes(item.localisation)) {
+        hierarchy[item.site][item.batiment][item.etage].push(item.localisation);
+      }
+    });
+    return hierarchy;
+  };
+
+  const getFilteredLocaux = () => {
+    if (!treeSearchQuery.trim()) return locaux;
+    const q = treeSearchQuery.toLowerCase();
+    return locaux.filter(item => 
+      item.site.toLowerCase().includes(q) ||
+      item.batiment.toLowerCase().includes(q) ||
+      item.etage.toLowerCase().includes(q) ||
+      item.localisation.toLowerCase().includes(q)
+    );
+  };
+
+  const handleAddNodeConfirm = async (e) => {
+    e.preventDefault();
+    if (!newNodeValue.trim()) return;
+
+    const val = newNodeValue.trim();
+    let record = {};
+
+    if (addingNode.type === 'localisation') {
+      record = {
+        site: addingNode.site,
+        batiment: addingNode.batiment,
+        etage: addingNode.etage,
+        localisation: val
+      };
+    } else if (addingNode.type === 'etage') {
+      record = {
+        site: addingNode.site,
+        batiment: addingNode.batiment,
+        etage: val,
+        localisation: 'Accueil'
+      };
+    } else if (addingNode.type === 'batiment') {
+      record = {
+        site: addingNode.site,
+        batiment: val,
+        etage: 'RDC',
+        localisation: 'Accueil'
+      };
+    } else if (addingNode.type === 'site') {
+      record = {
+        site: val,
+        batiment: 'Bâtiment A - Administration',
+        etage: 'RDC',
+        localisation: 'Accueil'
+      };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('locaux')
+        .insert(record)
+        .select();
+
+      if (error) throw error;
+      if (data) {
+        setLocaux(prev => [...prev, ...data]);
+        
+        // Auto-expand the parent node so the new item is visible immediately
+        setExpandedNodes(prev => ({
+          ...prev,
+          [addingNode.parentKey]: true
+        }));
+        
+        triggerToast(`Nouveau lieu "${val}" enregistré !`);
+      }
+    } catch (err) {
+      console.error("Erreur de création de lieu:", err);
+      alert("Erreur lors de l'enregistrement du lieu.");
+    } finally {
+      setAddingNode(null);
+      setNewNodeValue('');
+    }
+  };
+
+  const toggleNode = (key) => {
+    setExpandedNodes(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  useEffect(() => {
+    if (treeSearchQuery.trim()) {
+      const q = treeSearchQuery.toLowerCase();
+      const autoExpanded = {};
+      locaux.forEach(item => {
+        if (
+          item.site.toLowerCase().includes(q) ||
+          item.batiment.toLowerCase().includes(q) ||
+          item.etage.toLowerCase().includes(q) ||
+          item.localisation.toLowerCase().includes(q)
+        ) {
+          autoExpanded[`site:${item.site}`] = true;
+          autoExpanded[`site:${item.site}|bat:${item.batiment}`] = true;
+          autoExpanded[`site:${item.site}|bat:${item.batiment}|floor:${item.etage}`] = true;
+        }
+      });
+      setExpandedNodes(autoExpanded);
+    }
+  }, [treeSearchQuery, locaux]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -203,10 +319,9 @@ function App() {
     setSelectedBuilding('');
     setSelectedFloor('');
     setSelectedLocation('');
-    setSearchSiteQuery('');
-    setSearchBuildingQuery('');
-    setSearchFloorQuery('');
-    setSearchLocationQuery('');
+    setAddingNode(null);
+    setNewNodeValue('');
+    setTreeSearchQuery('');
     setShowEntryModal(false);
     clearForm();
   };
@@ -218,32 +333,6 @@ function App() {
     setClimDate(new Date().toISOString().split('T')[0]);
     setClimPhoto(null);
     setShowAddFormOverride(false);
-  };
-
-  // Select option in workflow
-  const selectSite = (site) => {
-    setSelectedSite(site);
-    setCurrentStep(1);
-    setSearchSiteQuery('');
-  };
-
-  const selectBuilding = (building) => {
-    setSelectedBuilding(building);
-    setCurrentStep(2);
-    setSearchBuildingQuery('');
-  };
-
-  const selectFloor = (floor) => {
-    setSelectedFloor(floor);
-    setCurrentStep(3);
-    setSearchFloorQuery('');
-  };
-
-  const selectLocation = (loc) => {
-    setSelectedLocation(loc);
-    clearForm();
-    setShowEntryModal(true);
-    setSearchLocationQuery('');
   };
 
   // Filter climatiseurs matching selected location
@@ -695,13 +784,9 @@ function App() {
               </div>
             </div>
 
-            <button type="submit" className="btn btn-primary btn-full mt-lg" style={{ padding: '0.75rem' }}>
+            <button type="submit" className="btn btn-primary btn-full mt-lg" style={{ padding: '0.75rem', marginBottom: '0.5rem' }}>
               Se connecter
             </button>
-
-            <div style={{ marginTop: '1.25rem', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', background: '#f8fafc', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
-              Accès démo : <strong style={{ color: 'var(--text-secondary)' }}>admin</strong> / <strong style={{ color: 'var(--text-secondary)' }}>admin</strong>
-            </div>
           </form>
         </div>
       ) : (
@@ -925,22 +1010,6 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="card">
-                      <div className="card-header">
-                        <h2 className="card-title">Guide rapide d'inventaire</h2>
-                      </div>
-                      <div className="card-body" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                        <p style={{ marginBottom: '0.5rem' }}>
-                          <strong>1. Recensement :</strong> Allez sur le menu "Recenser", renseignez le chemin hiérarchique, puis validez.
-                        </p>
-                        <p style={{ marginBottom: '0.5rem' }}>
-                          <strong>2. Fiche Technique :</strong> Si le local est équipé, la fiche apparaîtra et vous pourrez ajouter d'autres appareils si nécessaire.
-                        </p>
-                        <p>
-                          <strong>3. Rapports :</strong> La section "Inventaire" vous permet de filtrer, chercher et exporter en PDF.
-                        </p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -948,219 +1017,249 @@ function App() {
 
             {/* 2. RECENSER / SEARCH STEP FLOW VIEW */}
             {currentTab === 'add' && (
-              <div className="step-container">
-                <div className="step-header">
-                  <h2 className="step-title">Enregistrement d'équipement</h2>
-                  <div className="step-indicator">
-                    {[0, 1, 2, 3, 4].map(idx => (
-                      <span 
-                        key={idx} 
-                        className={`step-dot ${idx === currentStep ? 'active' : ''} ${idx < currentStep ? 'completed' : ''}`}
-                      />
-                    ))}
-                  </div>
-                </div>
+              <div className="tree-container">
+                {currentStep < 4 ? (
+                  <>
+                    <h2 className="mb-md" style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+                      Hiérarchie des locaux
+                    </h2>
+                    <p className="mb-lg" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      Explorez l'arborescence ci-dessous ou utilisez la recherche pour filtrer un local. Vous pouvez ajouter des lieux (sites, bâtiments, niveaux ou pièces) directement à chaque niveau de l'arbre.
+                    </p>
 
-                {/* Breadcrumbs path selection history */}
-                {(selectedSite || selectedBuilding || selectedFloor || selectedLocation) && (
-                  <div className="hierarchy-breadcrumbs">
-                    <span style={{ fontWeight: 'bold', color: 'var(--text-muted)', marginRight: '0.25rem' }}>Chemin :</span>
-                    <div className="breadcrumb-item">
-                      <span 
-                        style={{ cursor: 'pointer', textDecoration: selectedSite ? 'underline' : 'none' }} 
-                        onClick={() => { setCurrentStep(0); setSelectedSite(''); setSelectedBuilding(''); setSelectedFloor(''); setSelectedLocation(''); }}
+                    <div className="tree-header">
+                      <div className="input-wrapper tree-search-bar">
+                        <span className="input-icon"><IconSearch /></span>
+                        <input 
+                          type="text" 
+                          className="input-control" 
+                          placeholder="Rechercher un site, bâtiment, niveau, pièce..." 
+                          value={treeSearchQuery}
+                          onChange={(e) => setTreeSearchQuery(e.target.value)}
+                        />
+                      </div>
+
+                      <button 
+                        className="btn btn-primary"
+                        onClick={() => {
+                          setAddingNode({ parentKey: 'root', type: 'site' });
+                          setNewNodeValue('');
+                        }}
                       >
-                        Sites
-                      </span>
-                      {selectedSite && <span className="breadcrumb-separator"><IconChevronRight /></span>}
+                        <IconPlus /> Nouveau Site
+                      </button>
                     </div>
-                    {selectedSite && (
-                      <div className="breadcrumb-item">
-                        <span 
-                          style={{ cursor: 'pointer', textDecoration: selectedBuilding ? 'underline' : 'none' }}
-                          onClick={() => { setCurrentStep(1); setSelectedBuilding(''); setSelectedFloor(''); setSelectedLocation(''); }}
-                        >
-                          {selectedSite}
-                        </span>
-                        {selectedBuilding && <span className="breadcrumb-separator"><IconChevronRight /></span>}
+
+                    {/* Inline input for Site creation at root level */}
+                    {addingNode && addingNode.parentKey === 'root' && addingNode.type === 'site' && (
+                      <div className="tree-node-input" style={{ paddingLeft: 0, marginBottom: '1rem', background: '#f8fafc', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
+                        <input 
+                          type="text" 
+                          className="input-control" 
+                          placeholder="Nom du nouveau site..."
+                          value={newNodeValue}
+                          onChange={(e) => setNewNodeValue(e.target.value)}
+                          autoFocus
+                        />
+                        <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
                       </div>
                     )}
-                    {selectedBuilding && (
-                      <div className="breadcrumb-item">
-                        <span 
-                          style={{ cursor: 'pointer', textDecoration: selectedFloor ? 'underline' : 'none' }}
-                          onClick={() => { setCurrentStep(2); setSelectedFloor(''); setSelectedLocation(''); }}
-                        >
-                          {selectedBuilding}
-                        </span>
-                        {selectedFloor && <span className="breadcrumb-separator"><IconChevronRight /></span>}
-                      </div>
-                    )}
-                    {selectedFloor && (
-                      <div className="breadcrumb-item">
-                        <span 
-                          style={{ cursor: 'pointer', textDecoration: selectedLocation ? 'underline' : 'none' }}
-                          onClick={() => { setCurrentStep(3); setSelectedLocation(''); }}
-                        >
-                          {selectedFloor}
-                        </span>
-                        {selectedLocation && <span className="breadcrumb-separator"><IconChevronRight /></span>}
-                      </div>
-                    )}
-                    {selectedLocation && (
-                      <div className="breadcrumb-item">
-                        <span style={{ fontWeight: '700', color: 'var(--primary)' }}>{selectedLocation}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
 
-                {/* STEP 0: Site selection */}
-                {currentStep === 0 && (
-                  <div>
-                    <h3 className="mb-lg" style={{ fontSize: '0.95rem', fontWeight: '700' }}>1. Sélectionner ou saisir un site</h3>
-                    <div className="input-wrapper mb-lg" style={{ maxWidth: '400px' }}>
-                      <span className="input-icon"><IconSearch /></span>
-                      <input 
-                        type="text" 
-                        className="input-control" 
-                        placeholder="Rechercher ou saisir un site..." 
-                        value={searchSiteQuery}
-                        onChange={(e) => setSearchSiteQuery(e.target.value)}
-                      />
-                    </div>
-                    <div className="options-grid">
-                      {getSitesSuggestions()
-                        .filter(site => site.toLowerCase().includes(searchSiteQuery.toLowerCase()))
-                        .map((site, i) => (
-                          <div key={i} className="option-card" onClick={() => selectSite(site)}>
-                            {site}
-                          </div>
-                      ))}
-                      
-                      {searchSiteQuery.trim() && !getSitesSuggestions().some(s => s.toLowerCase() === searchSiteQuery.trim().toLowerCase()) && (
-                        <div 
-                          className="option-card selected" 
-                          style={{ borderStyle: 'dashed', background: '#f0f9ff' }}
-                          onClick={() => selectSite(searchSiteQuery.trim())}
-                        >
-                          <span>➕ Créer : <strong>{searchSiteQuery.trim()}</strong></span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                    {/* Tree List */}
+                    <div className="tree-list">
+                      {(() => {
+                        const hierarchy = buildHierarchy();
+                        const sites = Object.keys(hierarchy);
+                        if (sites.length === 0) {
+                          return (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                              Aucun site enregistré. Cliquez sur "Nouveau Site" pour commencer.
+                            </div>
+                          );
+                        }
 
-                {/* STEP 1: Building selection */}
-                {currentStep === 1 && (
-                  <div>
-                    <h3 className="mb-lg" style={{ fontSize: '0.95rem', fontWeight: '700' }}>2. Sélectionner ou saisir un bâtiment</h3>
-                    <div className="input-wrapper mb-lg" style={{ maxWidth: '400px' }}>
-                      <span className="input-icon"><IconSearch /></span>
-                      <input 
-                        type="text" 
-                        className="input-control" 
-                        placeholder="Rechercher ou saisir un bâtiment..." 
-                        value={searchBuildingQuery}
-                        onChange={(e) => setSearchBuildingQuery(e.target.value)}
-                      />
-                    </div>
-                    <div className="options-grid">
-                      {getBuildingsSuggestions()
-                        .filter(b => b.toLowerCase().includes(searchBuildingQuery.toLowerCase()))
-                        .map((building, i) => (
-                          <div key={i} className="option-card" onClick={() => selectBuilding(building)}>
-                            {building}
-                          </div>
-                      ))}
-                      
-                      {searchBuildingQuery.trim() && !getBuildingsSuggestions().some(b => b.toLowerCase() === searchBuildingQuery.trim().toLowerCase()) && (
-                        <div 
-                          className="option-card selected" 
-                          style={{ borderStyle: 'dashed', background: '#f0f9ff' }}
-                          onClick={() => selectBuilding(searchBuildingQuery.trim())}
-                        >
-                          <span>➕ Créer : <strong>{searchBuildingQuery.trim()}</strong></span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                        return sites.map((site) => {
+                          const siteKey = `site:${site}`;
+                          const isSiteExpanded = expandedNodes[siteKey];
+                          const buildings = Object.keys(hierarchy[site]);
 
-                {/* STEP 2: Floor selection */}
-                {currentStep === 2 && (
-                  <div>
-                    <h3 className="mb-lg" style={{ fontSize: '0.95rem', fontWeight: '700' }}>3. Sélectionner ou saisir un étage</h3>
-                    <div className="input-wrapper mb-lg" style={{ maxWidth: '400px' }}>
-                      <span className="input-icon"><IconSearch /></span>
-                      <input 
-                        type="text" 
-                        className="input-control" 
-                        placeholder="Rechercher ou saisir un étage..." 
-                        value={searchFloorQuery}
-                        onChange={(e) => setSearchFloorQuery(e.target.value)}
-                      />
-                    </div>
-                    <div className="options-grid">
-                      {getFloorsSuggestions()
-                        .filter(f => f.toLowerCase().includes(searchFloorQuery.toLowerCase()))
-                        .map((floor, i) => (
-                          <div key={i} className="option-card" onClick={() => selectFloor(floor)}>
-                            {floor}
-                          </div>
-                      ))}
-                      
-                      {searchFloorQuery.trim() && !getFloorsSuggestions().some(f => f.toLowerCase() === searchFloorQuery.trim().toLowerCase()) && (
-                        <div 
-                          className="option-card selected" 
-                          style={{ borderStyle: 'dashed', background: '#f0f9ff' }}
-                          onClick={() => selectFloor(searchFloorQuery.trim())}
-                        >
-                          <span>➕ Créer : <strong>{searchFloorQuery.trim()}</strong></span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                          return (
+                            <div key={siteKey} className="tree-node-wrapper">
+                              {/* Site Row */}
+                              <div className="tree-node" onClick={() => toggleNode(siteKey)}>
+                                <span className="tree-node-label site">
+                                  <span style={{ transform: isSiteExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
+                                    <IconChevronRight />
+                                  </span>
+                                  🏢 {site}
+                                </span>
+                                <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
+                                  <button 
+                                    className="tree-node-action-btn"
+                                    onClick={() => {
+                                      setAddingNode({ parentKey: siteKey, type: 'batiment', site });
+                                      setNewNodeValue('');
+                                    }}
+                                  >
+                                    + Bâtiment
+                                  </button>
+                                </div>
+                              </div>
 
-                {/* STEP 3: Location selection */}
-                {currentStep === 3 && (
-                  <div>
-                    <h3 className="mb-lg" style={{ fontSize: '0.95rem', fontWeight: '700' }}>4. Sélectionner ou saisir la localisation (salle, local)</h3>
-                    <div className="input-wrapper mb-lg" style={{ maxWidth: '400px' }}>
-                      <span className="input-icon"><IconSearch /></span>
-                      <input 
-                        type="text" 
-                        className="input-control" 
-                        placeholder="Rechercher ou saisir un local..." 
-                        value={searchLocationQuery}
-                        onChange={(e) => setSearchLocationQuery(e.target.value)}
-                      />
-                    </div>
-                    <div className="options-grid">
-                      {getLocationsSuggestions()
-                        .filter(loc => loc.toLowerCase().includes(searchLocationQuery.toLowerCase()))
-                        .map((loc, i) => (
-                          <div key={i} className="option-card" onClick={() => selectLocation(loc)}>
-                            {loc}
-                          </div>
-                      ))}
-                      
-                      {searchLocationQuery.trim() && !getLocationsSuggestions().some(l => l.toLowerCase() === searchLocationQuery.trim().toLowerCase()) && (
-                        <div 
-                          className="option-card selected" 
-                          style={{ borderStyle: 'dashed', background: '#f0f9ff' }}
-                          onClick={() => selectLocation(searchLocationQuery.trim())}
-                        >
-                          <span>➕ Créer local : <strong>{searchLocationQuery.trim()}</strong></span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                              {/* Site children */}
+                              {isSiteExpanded && (
+                                <div className="tree-children">
+                                  {/* Add Building Inline Input */}
+                                  {addingNode && addingNode.parentKey === siteKey && addingNode.type === 'batiment' && (
+                                    <div className="tree-node-input">
+                                      <input 
+                                        type="text" 
+                                        className="input-control" 
+                                        placeholder="Nom du bâtiment..."
+                                        value={newNodeValue}
+                                        onChange={(e) => setNewNodeValue(e.target.value)}
+                                        autoFocus
+                                      />
+                                      <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
+                                      <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
+                                    </div>
+                                  )}
 
-                {/* STEP 4: Technical Sheets / Register Form */}
-                {currentStep === 4 && (
+                                  {buildings.map((bat) => {
+                                    const batKey = `site:${site}|bat:${bat}`;
+                                    const isBatExpanded = expandedNodes[batKey];
+                                    const floors = Object.keys(hierarchy[site][bat]);
+
+                                    return (
+                                      <div key={batKey} className="tree-node-wrapper">
+                                        {/* Building Row */}
+                                        <div className="tree-node" onClick={() => toggleNode(batKey)}>
+                                          <span className="tree-node-label batiment">
+                                            <span style={{ transform: isBatExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
+                                              <IconChevronRight />
+                                            </span>
+                                            🏠 {bat}
+                                          </span>
+                                          <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
+                                            <button 
+                                              className="tree-node-action-btn"
+                                              onClick={() => {
+                                                setAddingNode({ parentKey: batKey, type: 'etage', site, batiment: bat });
+                                                setNewNodeValue('');
+                                              }}
+                                            >
+                                              + Niveau
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Building children */}
+                                        {isBatExpanded && (
+                                          <div className="tree-children">
+                                            {/* Add Floor Inline Input */}
+                                            {addingNode && addingNode.parentKey === batKey && addingNode.type === 'etage' && (
+                                              <div className="tree-node-input">
+                                                <input 
+                                                  type="text" 
+                                                  className="input-control" 
+                                                  placeholder="Nom du niveau (ex: RDC, Étage 1)..."
+                                                  value={newNodeValue}
+                                                  onChange={(e) => setNewNodeValue(e.target.value)}
+                                                  autoFocus
+                                                />
+                                                <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
+                                                <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
+                                              </div>
+                                            )}
+
+                                            {floors.map((floor) => {
+                                              const floorKey = `site:${site}|bat:${bat}|floor:${floor}`;
+                                              const isFloorExpanded = expandedNodes[floorKey];
+                                              const locations = hierarchy[site][bat][floor];
+
+                                              return (
+                                                <div key={floorKey} className="tree-node-wrapper">
+                                                  {/* Floor Row */}
+                                                  <div className="tree-node" onClick={() => toggleNode(floorKey)}>
+                                                    <span className="tree-node-label etage">
+                                                      <span style={{ transform: isFloorExpanded ? 'rotate(90deg)' : 'none', display: 'inline-block', transition: 'transform 0.1s' }}>
+                                                        <IconChevronRight />
+                                                      </span>
+                                                      📶 Niveau : {floor}
+                                                    </span>
+                                                    <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
+                                                      <button 
+                                                        className="tree-node-action-btn"
+                                                        onClick={() => {
+                                                          setAddingNode({ parentKey: floorKey, type: 'localisation', site, batiment: bat, etage: floor });
+                                                          setNewNodeValue('');
+                                                        }}
+                                                      >
+                                                        + Local
+                                                      </button>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Floor children */}
+                                                  {isFloorExpanded && (
+                                                    <div className="tree-children">
+                                                      {/* Add Location Inline Input */}
+                                                      {addingNode && addingNode.parentKey === floorKey && addingNode.type === 'localisation' && (
+                                                        <div className="tree-node-input">
+                                                          <input 
+                                                            type="text" 
+                                                            className="input-control" 
+                                                            placeholder="Nom du local (ex: Bureau 104)..."
+                                                            value={newNodeValue}
+                                                            onChange={(e) => setNewNodeValue(e.target.value)}
+                                                            autoFocus
+                                                          />
+                                                          <button className="btn btn-primary btn-sm" onClick={handleAddNodeConfirm}>✓</button>
+                                                          <button className="btn btn-secondary btn-sm" onClick={() => setAddingNode(null)}>✗</button>
+                                                        </div>
+                                                      )}
+
+                                                      {locations.map((loc) => {
+                                                        const locKey = `site:${site}|bat:${bat}|floor:${floor}|loc:${loc}`;
+                                                        return (
+                                                          <div 
+                                                            key={locKey} 
+                                                            className="tree-node"
+                                                            onClick={() => {
+                                                              setSelectedSite(site);
+                                                              setSelectedBuilding(bat);
+                                                              setSelectedFloor(floor);
+                                                              setSelectedLocation(loc);
+                                                              clearForm();
+                                                              setShowEntryModal(true);
+                                                            }}
+                                                          >
+                                                            <span className="tree-node-label localisation">
+                                                              📍 {loc}
+                                                            </span>
+                                                          </div>
+                                                        );
+                                                      })}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </>
+                ) : (
                   <div>
                     {/* View existing ACs */}
                     {getClimsInSelectedLocation().length > 0 && !showAddFormOverride ? (
