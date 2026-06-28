@@ -1072,6 +1072,19 @@ body {
     align-items: stretch;
     gap: 0.5rem;
   }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+  .modal-footer button, .modal-footer .btn {
+    width: 100% !important;
+    font-size: 0.825rem !important;
+    padding: 0.65rem 1rem !important;
+    margin: 0 !important;
+  }
 }
 
 /* --- Dialog Modals (MD3 Floating Sheets) --- */
