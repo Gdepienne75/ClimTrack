@@ -84,9 +84,15 @@ function App() {
   // Auth states
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
   const [loggedInUser, setLoggedInUser] = useState(() => localStorage.getItem('loggedInUser') || '');
+  const [allowedSites, setAllowedSites] = useState(() => {
+    const saved = localStorage.getItem('allowedSites');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
+
+  const isAllSitesAllowed = loggedInUser === 'admin' || allowedSites.includes('*') || allowedSites.length === 0;
 
   // Main navigation
   const [currentTab, setCurrentTab] = useState(() => localStorage.getItem('currentTab') || 'dashboard'); // 'dashboard', 'add', 'report'
@@ -182,27 +188,33 @@ function App() {
       setSupabaseError(null);
 
       // 1. Fetch counts (efficiently without downloading all rows)
-      const { count: total, error: errTotal } = await supabase
-        .from('climatiseurs')
-        .select('*', { count: 'exact', head: true });
+      let totalQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true });
+      if (!isAllSitesAllowed) {
+        totalQuery = totalQuery.in('site', allowedSites);
+      }
+      const { count: total, error: errTotal } = await totalQuery;
       if (errTotal) throw errTotal;
 
-      const { count: monobloc, error: errMono } = await supabase
-        .from('climatiseurs')
-        .select('*', { count: 'exact', head: true })
-        .eq('type', 'monobloc');
+      let monoQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true }).eq('type', 'monobloc');
+      if (!isAllSitesAllowed) {
+        monoQuery = monoQuery.in('site', allowedSites);
+      }
+      const { count: monobloc, error: errMono } = await monoQuery;
       if (errMono) throw errMono;
 
-      const { count: split, error: errSplit } = await supabase
-        .from('climatiseurs')
-        .select('*', { count: 'exact', head: true })
-        .eq('type', 'split');
+      let splitQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true }).eq('type', 'split');
+      if (!isAllSitesAllowed) {
+        splitQuery = splitQuery.in('site', allowedSites);
+      }
+      const { count: split, error: errSplit } = await splitQuery;
       if (errSplit) throw errSplit;
 
       // Equipped rooms count (we download just the location fields of climatiseurs, which is tiny)
-      const { data: climLocs, error: errLocs } = await supabase
-        .from('climatiseurs')
-        .select('site,batiment,etage,localisation');
+      let locsQuery = supabase.from('climatiseurs').select('site,batiment,etage,localisation');
+      if (!isAllSitesAllowed) {
+        locsQuery = locsQuery.in('site', allowedSites);
+      }
+      const { data: climLocs, error: errLocs } = await locsQuery;
       if (errLocs) throw errLocs;
 
       const uniqueEquipped = Array.from(new Set(
@@ -217,11 +229,11 @@ function App() {
       });
 
       // 2. Fetch the 5 most recent installations
-      const { data: recents, error: errRecents } = await supabase
-        .from('climatiseurs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
+      let recentsQuery = supabase.from('climatiseurs').select('*').order('created_at', { ascending: false }).limit(5);
+      if (!isAllSitesAllowed) {
+        recentsQuery = recentsQuery.in('site', allowedSites);
+      }
+      const { data: recents, error: errRecents } = await recentsQuery;
       if (errRecents) throw errRecents;
       setRecentClimatiseurs(recents || []);
 
@@ -229,9 +241,11 @@ function App() {
       await loadAllClimatiseurs();
 
       // 4. Fetch unique sites from the view
-      const { data: sitesData, error: errSites } = await supabase
-        .from('view_sites')
-        .select('site');
+      let sitesQuery = supabase.from('view_sites').select('site');
+      if (!isAllSitesAllowed) {
+        sitesQuery = sitesQuery.in('site', allowedSites);
+      }
+      const { data: sitesData, error: errSites } = await sitesQuery;
 
       if (errSites) {
         if (errSites.message && (errSites.message.includes('relation') || errSites.message.includes('does not exist'))) {
@@ -241,8 +255,12 @@ function App() {
       }
 
       if (!sitesData || sitesData.length === 0) {
-        // Table is empty, seed it!
-        await seedDefaultLocaux();
+        // Table is empty, seed it! (Only for users with full sites access)
+        if (isAllSitesAllowed) {
+          await seedDefaultLocaux();
+        } else {
+          setSites([]);
+        }
       } else {
         setSites(sitesData.map(s => s.site));
       }
@@ -266,10 +284,11 @@ function App() {
       let hasMore = true;
 
       while (hasMore) {
-        const { data, error } = await supabase
-          .from('climatiseurs')
-          .select('*')
-          .range(page * pageSize, (page + 1) * pageSize - 1);
+        let query = supabase.from('climatiseurs').select('*').range(page * pageSize, (page + 1) * pageSize - 1);
+        if (!isAllSitesAllowed) {
+          query = query.in('site', allowedSites);
+        }
+        const { data, error } = await query;
 
         if (error) throw error;
         if (data && data.length > 0) {
@@ -400,9 +419,11 @@ function App() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('locaux')
-        .select('*')
+      let query = supabase.from('locaux').select('*');
+      if (!isAllSitesAllowed) {
+        query = query.in('site', allowedSites);
+      }
+      const { data, error } = await query
         .or(`site.ilike.%${q}%,batiment.ilike.%${q}%,etage.ilike.%${q}%,localisation.ilike.%${q}%`)
         .limit(100); // cap to 100 results for layout ergonomics and speed
 
@@ -536,10 +557,13 @@ function App() {
       }
 
       if (data) {
+        const sites = data.sites_autorises || [];
         setIsLoggedIn(true);
         setLoggedInUser(user);
+        setAllowedSites(sites);
         localStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('loggedInUser', user);
+        localStorage.setItem('allowedSites', JSON.stringify(sites));
         setAuthError('');
       } else {
         setAuthError('Identifiants incorrects. Veuillez vérifier.');
@@ -554,8 +578,10 @@ function App() {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setLoggedInUser('');
+    setAllowedSites([]);
     localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('loggedInUser');
+    localStorage.removeItem('allowedSites');
     localStorage.removeItem('currentTab');
     setCurrentTab('dashboard');
     resetStepFlow();
