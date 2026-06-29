@@ -1213,9 +1213,11 @@ function App() {
             </nav>
 
             <div className="sidebar-footer">
-              <div className="user-badge">
+              <div className="user-badge" style={{ gap: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 <IconUser />
-                <span>Technicien Connecté</span>
+                <span style={{ textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {loggedInUser} ({isReadOnly ? 'Lecture Seule' : loggedInUser === 'admin' ? 'Administrateur' : 'Opérateur'})
+                </span>
               </div>
               <button className="btn btn-secondary btn-full" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} onClick={handleLogout}>
                 <IconLogout />
