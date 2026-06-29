@@ -128,7 +128,8 @@ function App() {
   const [climPower, setClimPower] = useState('');
   const [climDate, setClimDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [climPhoto, setClimPhoto] = useState(null); // base64 string
-  const [climIsLocation, setClimIsLocation] = useState(false);
+  const [climTypeContrat, setClimTypeContrat] = useState('achat');
+  const [climObservations, setClimObservations] = useState('');
   const [isCompressing, setIsCompressing] = useState(false);
   const [showAddFormOverride, setShowAddFormOverride] = useState(false); 
 
@@ -152,7 +153,8 @@ function App() {
   const [editClimPower, setEditClimPower] = useState('');
   const [editClimDate, setEditClimDate] = useState('');
   const [editClimPhoto, setEditClimPhoto] = useState(null);
-  const [editClimIsLocation, setEditClimIsLocation] = useState(false);
+  const [editClimTypeContrat, setEditClimTypeContrat] = useState('achat');
+  const [editClimObservations, setEditClimObservations] = useState('');
   const [showInventoryEditModal, setShowInventoryEditModal] = useState(false);
 
   // Toast message
@@ -617,7 +619,8 @@ function App() {
     setClimPower('');
     setClimDate(new Date().toISOString().split('T')[0]);
     setClimPhoto(null);
-    setClimIsLocation(false);
+    setClimTypeContrat('achat');
+    setClimObservations('');
     setShowAddFormOverride(false);
   };
 
@@ -736,7 +739,8 @@ function App() {
         puissance: climPower ? Number(climPower) : null,
         date_pose: climDate,
         photo_url: photoUrl,
-        is_location: climIsLocation,
+        type_contrat: climTypeContrat,
+        observations: climObservations.trim() || null,
         enregistre_par: loggedInUser || 'admin',
         date_ajout: new Date().toISOString().split('T')[0]
       };
@@ -793,7 +797,8 @@ function App() {
     setEditClimPower(clim.puissance || '');
     setEditClimDate(clim.date_pose);
     setEditClimPhoto(clim.photo_url || null);
-    setEditClimIsLocation(!!clim.is_location);
+    setEditClimTypeContrat(clim.type_contrat || 'achat');
+    setEditClimObservations(clim.observations || '');
   };
 
   // Handle edit form photo upload & compression
@@ -865,7 +870,8 @@ function App() {
           puissance: editClimPower ? parseInt(editClimPower, 10) : null,
           date_pose: editClimDate,
           photo_url: photoUrl,
-          is_location: editClimIsLocation,
+          type_contrat: editClimTypeContrat,
+          observations: editClimObservations.trim() || null,
           enregistre_par: loggedInUser || 'admin'
         })
         .eq('id', editingClimId);
@@ -949,7 +955,7 @@ function App() {
     doc.setDrawColor(226, 232, 240); 
     doc.line(14, 36, 196, 36);
 
-    const headers = [["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Location", "Date de Pose", "Opérateur"]];
+    const headers = [["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Contrat", "Date de Pose", "Opérateur", "Observations"]];
     const rows = sortedData.map(c => [
       c.site,
       c.batiment,
@@ -958,9 +964,10 @@ function App() {
       c.numero,
       c.type.toUpperCase(),
       c.puissance ? `${c.puissance} W` : '-',
-      c.is_location ? 'OUI' : 'NON',
+      (c.type_contrat || 'achat').toUpperCase(),
       formatDateFR(c.date_pose),
-      c.enregistre_par || '-'
+      c.enregistre_par || '-',
+      c.observations || '-'
     ]);
 
     autoTable(doc, {
@@ -979,16 +986,17 @@ function App() {
         textColor: [30, 41, 59] 
       },
       columnStyles: {
-        0: { cellWidth: 22 }, 
-        1: { cellWidth: 22 }, 
-        2: { cellWidth: 12 }, 
-        3: { cellWidth: 22 }, 
-        4: { cellWidth: 22 }, 
-        5: { cellWidth: 15 }, 
-        6: { cellWidth: 15 }, 
+        0: { cellWidth: 17 }, 
+        1: { cellWidth: 17 }, 
+        2: { cellWidth: 10 }, 
+        3: { cellWidth: 17 }, 
+        4: { cellWidth: 17 }, 
+        5: { cellWidth: 13 }, 
+        6: { cellWidth: 13 }, 
         7: { cellWidth: 15 },
-        8: { cellWidth: 18 },
-        9: { cellWidth: 19 }
+        8: { cellWidth: 15 },
+        9: { cellWidth: 15 },
+        10: { cellWidth: 25 }
       },
       margin: { top: 40, left: 14, right: 14 },
       didDrawPage: (data) => {
@@ -1727,29 +1735,26 @@ function App() {
                                     />
                                   </div>
                                   <div className="form-group">
-                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Matériel de location ?</label>
-                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.4rem', height: 'var(--input-height)', alignItems: 'center' }}>
-                                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
-                                        <input 
-                                          type="radio" 
-                                          name={`edit-inline-location-${clim.id}`}
-                                          checked={editClimIsLocation === true}
-                                          onChange={() => setEditClimIsLocation(true)}
-                                          style={{ accentColor: 'var(--primary)', width: '15px', height: '15px' }}
-                                        />
-                                        Oui
-                                      </label>
-                                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
-                                        <input 
-                                          type="radio" 
-                                          name={`edit-inline-location-${clim.id}`}
-                                          checked={editClimIsLocation === false}
-                                          onChange={() => setEditClimIsLocation(false)}
-                                          style={{ accentColor: 'var(--primary)', width: '15px', height: '15px' }}
-                                        />
-                                        Non
-                                      </label>
-                                    </div>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Type de contrat</label>
+                                    <select 
+                                      className="input-control no-icon"
+                                      value={editClimTypeContrat}
+                                      onChange={(e) => setEditClimTypeContrat(e.target.value)}
+                                    >
+                                      <option value="achat">Achat</option>
+                                      <option value="location">Location</option>
+                                      <option value="personnel">Personnel</option>
+                                    </select>
+                                  </div>
+                                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Observations</label>
+                                    <input 
+                                      type="text" 
+                                      className="input-control no-icon"
+                                      value={editClimObservations}
+                                      onChange={(e) => setEditClimObservations(e.target.value)}
+                                      placeholder="Ajouter une remarque ou observation (facultatif)"
+                                    />
                                   </div>
                                 </div>
 
@@ -1846,8 +1851,12 @@ function App() {
                                   <span className="detail-value">{formatDateFR(clim.date_pose)}</span>
                                 </div>
                                 <div className="detail-item">
-                                  <span className="detail-label">Location ?</span>
-                                  <span className="detail-value">{clim.is_location ? 'Oui' : 'Non'}</span>
+                                  <span className="detail-label">Type de contrat</span>
+                                  <span className="detail-value" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Observations</span>
+                                  <span className="detail-value" style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>{clim.observations || '-'}</span>
                                 </div>
                                 <div className="detail-item">
                                   <span className="detail-label">Enregistré par</span>
@@ -1988,29 +1997,29 @@ function App() {
                             </div>
 
                             <div className="form-group">
-                              <label style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Matériel de location ?</label>
-                              <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.4rem', height: 'var(--input-height)', alignItems: 'center' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                                  <input 
-                                    type="radio" 
-                                    name="climIsLocation"
-                                    checked={climIsLocation === true}
-                                    onChange={() => setClimIsLocation(true)}
-                                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
-                                  />
-                                  Oui
-                                </label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                                  <input 
-                                    type="radio" 
-                                    name="climIsLocation"
-                                    checked={climIsLocation === false}
-                                    onChange={() => setClimIsLocation(false)}
-                                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
-                                  />
-                                  Non (Achat)
-                                </label>
-                              </div>
+                              <label htmlFor="clim-contract">Type de contrat</label>
+                              <select 
+                                id="clim-contract" 
+                                className="input-control no-icon"
+                                value={climTypeContrat}
+                                onChange={(e) => setClimTypeContrat(e.target.value)}
+                              >
+                                <option value="achat">Achat</option>
+                                <option value="location">Location</option>
+                                <option value="personnel">Personnel</option>
+                              </select>
+                            </div>
+
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                              <label htmlFor="clim-observations">Observations (Optionnel)</label>
+                              <input 
+                                type="text" 
+                                id="clim-observations" 
+                                className="input-control no-icon"
+                                value={climObservations}
+                                onChange={(e) => setClimObservations(e.target.value)}
+                                placeholder="Ajouter une remarque ou une observation (facultatif)" 
+                              />
                             </div>
 
                           </div>
@@ -2161,9 +2170,10 @@ function App() {
                             <th>N° Climatiseur</th>
                             <th>Type</th>
                             <th>Puissance</th>
-                            <th>Location</th>
+                            <th>Contrat</th>
                             <th>Opérateur</th>
                             <th>Date de Pose</th>
+                            <th>Observations</th>
                             {!isReadOnly && <th style={{ width: '60px', textAlign: 'center' }}>Actions</th>}
                           </tr>
                         </thead>
@@ -2193,9 +2203,10 @@ function App() {
                                 </span>
                               </td>
                               <td data-label="Puissance">{clim.puissance ? `${clim.puissance} W` : '-'}</td>
-                              <td data-label="Location">{clim.is_location ? 'Oui' : 'Non'}</td>
+                              <td data-label="Contrat" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</td>
                               <td data-label="Opérateur" style={{ textTransform: 'capitalize' }}>{clim.enregistre_par || '-'}</td>
                               <td data-label="Date de Pose">{formatDateFR(clim.date_pose)}</td>
+                              <td data-label="Observations" style={{ fontStyle: 'italic', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clim.observations || '-'}</td>
                                {!isReadOnly && (
                                  <td data-label="Actions" style={{ textAlign: 'center' }}>
                                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
@@ -2260,12 +2271,16 @@ function App() {
                                 <span className="report-card-value">{formatDateFR(clim.date_pose)}</span>
                               </div>
                               <div className="report-card-row">
-                                <span className="report-card-label">🔑 Location ?</span>
-                                <span className="report-card-value">{clim.is_location ? 'Oui' : 'Non'}</span>
+                                <span className="report-card-label">🔑 Type de contrat</span>
+                                <span className="report-card-value" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</span>
                               </div>
                               <div className="report-card-row">
                                 <span className="report-card-label">👤 Enregistré par</span>
                                 <span className="report-card-value" style={{ textTransform: 'capitalize' }}>{clim.enregistre_par || '-'}</span>
+                              </div>
+                              <div className="report-card-row">
+                                <span className="report-card-label">📝 Observations</span>
+                                <span className="report-card-value" style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>{clim.observations || '-'}</span>
                               </div>
                             </div>
 
@@ -2384,29 +2399,29 @@ function App() {
                     </div>
 
                     <div className="form-group">
-                      <label style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Matériel de location ?</label>
-                      <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.4rem', height: 'var(--input-height)', alignItems: 'center' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                          <input 
-                            type="radio" 
-                            name="editInvIsLocation"
-                            checked={editClimIsLocation === true}
-                            onChange={() => setEditClimIsLocation(true)}
-                            style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
-                          />
-                          Oui
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                          <input 
-                            type="radio" 
-                            name="editInvIsLocation"
-                            checked={editClimIsLocation === false}
-                            onChange={() => setEditClimIsLocation(false)}
-                            style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
-                          />
-                          Non
-                        </label>
-                      </div>
+                      <label htmlFor="edit-inv-contract">Type de contrat</label>
+                      <select 
+                        id="edit-inv-contract" 
+                        className="input-control no-icon"
+                        value={editClimTypeContrat}
+                        onChange={(e) => setEditClimTypeContrat(e.target.value)}
+                      >
+                        <option value="achat">Achat</option>
+                        <option value="location">Location</option>
+                        <option value="personnel">Personnel</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="edit-inv-observations">Observations</label>
+                      <input 
+                        type="text" 
+                        id="edit-inv-observations" 
+                        className="input-control no-icon"
+                        value={editClimObservations}
+                        onChange={(e) => setEditClimObservations(e.target.value)}
+                        placeholder="Ajouter une remarque ou observation (facultatif)" 
+                      />
                     </div>
 
                     <div className="form-group">
