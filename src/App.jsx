@@ -955,7 +955,7 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-container">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="toast">
