@@ -88,6 +88,7 @@ function App() {
     const saved = localStorage.getItem('allowedSites');
     return saved ? JSON.parse(saved) : [];
   });
+  const [isReadOnly, setIsReadOnly] = useState(() => localStorage.getItem('isReadOnly') === 'true');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
@@ -436,6 +437,10 @@ function App() {
 
   const handleAddNodeConfirm = async (e) => {
     e.preventDefault();
+    if (isReadOnly) {
+      triggerToast("Vous êtes en mode lecture seule. Modification impossible.");
+      return;
+    }
     if (!newNodeValue.trim()) return;
 
     const val = newNodeValue.trim();
@@ -558,12 +563,15 @@ function App() {
 
       if (data) {
         const sites = data.sites_autorises || [];
+        const readOnly = !!data.lecture_seule;
         setIsLoggedIn(true);
         setLoggedInUser(user);
         setAllowedSites(sites);
+        setIsReadOnly(readOnly);
         localStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('loggedInUser', user);
         localStorage.setItem('allowedSites', JSON.stringify(sites));
+        localStorage.setItem('isReadOnly', String(readOnly));
         setAuthError('');
       } else {
         setAuthError('Identifiants incorrects. Veuillez vérifier.');
@@ -579,9 +587,11 @@ function App() {
     setIsLoggedIn(false);
     setLoggedInUser('');
     setAllowedSites([]);
+    setIsReadOnly(false);
     localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('loggedInUser');
     localStorage.removeItem('allowedSites');
+    localStorage.removeItem('isReadOnly');
     localStorage.removeItem('currentTab');
     setCurrentTab('dashboard');
     resetStepFlow();
@@ -642,6 +652,10 @@ function App() {
   // Add a new climatiseur to Supabase DB and upload image to Supabase Storage
   const handleRegisterClim = async (e) => {
     e.preventDefault();
+    if (isReadOnly) {
+      triggerToast("Vous êtes en mode lecture seule. Modification impossible.");
+      return;
+    }
     if (!climNumber.trim()) {
       alert("Veuillez saisir un numéro de climatiseur.");
       return;
@@ -749,6 +763,10 @@ function App() {
 
   // Delete climatiseur from Supabase DB
   const handleDelete = async (id) => {
+    if (isReadOnly) {
+      triggerToast("Vous êtes en mode lecture seule. Modification impossible.");
+      return;
+    }
     if (window.confirm("Êtes-vous sûr de vouloir supprimer cette installation ?")) {
       try {
         const { error: deleteError } = await supabase
@@ -802,6 +820,10 @@ function App() {
   // Submit AC unit modifications to Supabase
   const handleSaveEdit = async (e) => {
     e.preventDefault();
+    if (isReadOnly) {
+      triggerToast("Vous êtes en mode lecture seule. Modification impossible.");
+      return;
+    }
     if (!editClimNumber.trim() || !editClimDate) {
       alert("Veuillez remplir les champs obligatoires (*)");
       return;
@@ -1502,17 +1524,19 @@ function App() {
                                               </span>
                                               <IconBuilding /> {bat}
                                             </span>
-                                            <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
-                                              <button 
-                                                className="tree-node-action-btn"
-                                                onClick={() => {
-                                                  setAddingNode({ parentKey: batKey, type: 'etage', site, batiment: bat });
-                                                  setNewNodeValue('');
-                                                }}
-                                              >
-                                                + Niveau
-                                              </button>
-                                            </div>
+                                            {!isReadOnly && (
+                                              <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
+                                                <button 
+                                                  className="tree-node-action-btn"
+                                                  onClick={() => {
+                                                    setAddingNode({ parentKey: batKey, type: 'etage', site, batiment: bat });
+                                                    setNewNodeValue('');
+                                                  }}
+                                                >
+                                                  + Niveau
+                                                </button>
+                                              </div>
+                                            )}
                                           </div>
 
                                           {/* Building children */}
@@ -1555,17 +1579,19 @@ function App() {
                                                           </span>
                                                           <IconFloor /> Niveau : {floor}
                                                         </span>
-                                                        <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
-                                                          <button 
-                                                            className="tree-node-action-btn"
-                                                            onClick={() => {
-                                                              setAddingNode({ parentKey: floorKey, type: 'localisation', site, batiment: bat, etage: floor });
-                                                              setNewNodeValue('');
-                                                            }}
-                                                          >
-                                                            + Local
-                                                          </button>
-                                                        </div>
+                                                        {!isReadOnly && (
+                                                          <div className="tree-node-actions" onClick={(e) => e.stopPropagation()}>
+                                                            <button 
+                                                              className="tree-node-action-btn"
+                                                              onClick={() => {
+                                                                setAddingNode({ parentKey: floorKey, type: 'localisation', site, batiment: bat, etage: floor });
+                                                                setNewNodeValue('');
+                                                              }}
+                                                            >
+                                                              + Local
+                                                            </button>
+                                                          </div>
+                                                        )}
                                                       </div>
 
                                                       {/* Floor children */}
@@ -1829,22 +1855,24 @@ function App() {
                                   <span className="detail-label">Ajouté le</span>
                                   <span className="detail-value">{formatDateFR(clim.date_ajout)}</span>
                                 </div>
-                                <div className="detail-item" style={{ justifyContent: 'flex-start', gap: '0.5rem', marginTop: '0.75rem' }}>
-                                  <button 
-                                    className="btn btn-secondary" 
-                                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
-                                    onClick={() => startEditing(clim)}
-                                  >
-                                    ✏️ Modifier
-                                  </button>
-                                  <button 
-                                    className="btn btn-danger" 
-                                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }} 
-                                    onClick={() => handleDelete(clim.id)}
-                                  >
-                                    <IconTrash /> Supprimer
-                                  </button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div className="detail-item" style={{ justifyContent: 'flex-start', gap: '0.5rem', marginTop: '0.75rem' }}>
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+                                      onClick={() => startEditing(clim)}
+                                    >
+                                      ✏️ Modifier
+                                    </button>
+                                    <button 
+                                      className="btn btn-danger" 
+                                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }} 
+                                      onClick={() => handleDelete(clim.id)}
+                                    >
+                                      <IconTrash /> Supprimer
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                               
                               <div className="fiche-photo">
@@ -1862,12 +1890,14 @@ function App() {
                         })}
 
                         <div className="btn-group">
-                          <button 
-                            className="btn btn-primary"
-                            onClick={() => setShowAddFormOverride(true)}
-                          >
-                            <IconPlus /> Ajouter un autre climatiseur
-                          </button>
+                          {!isReadOnly && (
+                            <button 
+                              className="btn btn-primary"
+                              onClick={() => setShowAddFormOverride(true)}
+                            >
+                              <IconPlus /> Ajouter un autre climatiseur
+                            </button>
+                          )}
                           <button 
                             className="btn btn-secondary"
                             onClick={resetStepFlow}
@@ -1875,6 +1905,20 @@ function App() {
                             Fermer
                           </button>
                         </div>
+                      </div>
+                    ) : isReadOnly ? (
+                      /* Read-Only empty state */
+                      <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                        <div className="fiche-header" style={{ justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                          <IconInfo />
+                          <span>Aucun climatiseur</span>
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '1rem 0' }}>
+                          Il n'y a aucun équipement enregistré dans ce local ({selectedLocation}).
+                        </p>
+                        <button className="btn btn-secondary" onClick={resetStepFlow} style={{ margin: '0 auto', display: 'block' }}>
+                          Choisir un autre local
+                        </button>
                       </div>
                     ) : (
                       /* Creation Form */
@@ -2118,7 +2162,7 @@ function App() {
                             <th>Location</th>
                             <th>Opérateur</th>
                             <th>Date de Pose</th>
-                            <th style={{ width: '60px', textAlign: 'center' }}>Suppr.</th>
+                            {!isReadOnly && <th style={{ width: '60px', textAlign: 'center' }}>Actions</th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -2150,27 +2194,29 @@ function App() {
                               <td data-label="Location">{clim.is_location ? 'Oui' : 'Non'}</td>
                               <td data-label="Opérateur" style={{ textTransform: 'capitalize' }}>{clim.enregistre_par || '-'}</td>
                               <td data-label="Date de Pose">{formatDateFR(clim.date_pose)}</td>
-                              <td data-label="Actions" style={{ textAlign: 'center' }}>
-                                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
-                                  <button 
-                                    className="btn btn-secondary" 
-                                    style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
-                                    onClick={() => {
-                                      startEditing(clim);
-                                      setShowInventoryEditModal(true);
-                                    }}
-                                  >
-                                    ✏️
-                                  </button>
-                                  <button 
-                                    className="btn btn-danger" 
-                                    style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
-                                    onClick={() => handleDelete(clim.id)}
-                                  >
-                                    <IconTrash />
-                                  </button>
-                                </div>
-                              </td>
+                               {!isReadOnly && (
+                                 <td data-label="Actions" style={{ textAlign: 'center' }}>
+                                   <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                                     <button 
+                                       className="btn btn-secondary" 
+                                       style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
+                                       onClick={() => {
+                                         startEditing(clim);
+                                         setShowInventoryEditModal(true);
+                                       }}
+                                     >
+                                       ✏️
+                                     </button>
+                                     <button 
+                                       className="btn btn-danger" 
+                                       style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
+                                       onClick={() => handleDelete(clim.id)}
+                                     >
+                                       <IconTrash />
+                                     </button>
+                                   </div>
+                                 </td>
+                               )}
                             </tr>
                           ))}
                         </tbody>
@@ -2221,25 +2267,27 @@ function App() {
                               </div>
                             </div>
 
-                            <div className="report-card-footer">
-                              <button 
-                                className="btn btn-secondary btn-sm" 
-                                style={{ flex: '1' }}
-                                onClick={() => {
-                                  startEditing(clim);
-                                  setShowInventoryEditModal(true);
-                                }}
-                              >
-                                ✏️ Modifier
-                              </button>
-                              <button 
-                                className="btn btn-danger btn-sm" 
-                                style={{ flex: '1' }}
-                                onClick={() => handleDelete(clim.id)}
-                              >
-                                <IconTrash /> Supprimer
-                              </button>
-                            </div>
+                            {!isReadOnly && (
+                              <div className="report-card-footer">
+                                <button 
+                                  className="btn btn-secondary btn-sm" 
+                                  style={{ flex: '1' }}
+                                  onClick={() => {
+                                    startEditing(clim);
+                                    setShowInventoryEditModal(true);
+                                  }}
+                                >
+                                  ✏️ Modifier
+                                </button>
+                                <button 
+                                  className="btn btn-danger btn-sm" 
+                                  style={{ flex: '1' }}
+                                  onClick={() => handleDelete(clim.id)}
+                                >
+                                  <IconTrash /> Supprimer
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
