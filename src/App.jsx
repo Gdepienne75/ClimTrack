@@ -83,6 +83,7 @@ const DEFAULT_LOCATIONS = ["Bureau 101", "Bureau 102", "Salle Réunion", "Local 
 function App() {
   // Auth states
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
+  const [loggedInUser, setLoggedInUser] = useState(() => localStorage.getItem('loggedInUser') || '');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
@@ -120,6 +121,7 @@ function App() {
   const [climPower, setClimPower] = useState('');
   const [climDate, setClimDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [climPhoto, setClimPhoto] = useState(null); // base64 string
+  const [climIsLocation, setClimIsLocation] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [showAddFormOverride, setShowAddFormOverride] = useState(false); 
 
@@ -143,6 +145,7 @@ function App() {
   const [editClimPower, setEditClimPower] = useState('');
   const [editClimDate, setEditClimDate] = useState('');
   const [editClimPhoto, setEditClimPhoto] = useState(null);
+  const [editClimIsLocation, setEditClimIsLocation] = useState(false);
   const [showInventoryEditModal, setShowInventoryEditModal] = useState(false);
 
   // Toast message
@@ -508,21 +511,51 @@ function App() {
   }, [isLoggedIn]);
 
   // Handle Login
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (usernameInput.trim().toLowerCase() === 'admin' && passwordInput === 'admin') {
-      setIsLoggedIn(true);
-      localStorage.setItem('isLoggedIn', 'true');
-      setAuthError('');
-    } else {
-      setAuthError('Identifiants incorrects. Essayer "admin" / "admin".');
+    const user = usernameInput.trim().toLowerCase();
+    const pass = passwordInput;
+    if (!user || !pass) {
+      setAuthError('Veuillez remplir tous les champs.');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('utilisateurs')
+        .select('*')
+        .eq('username', user)
+        .eq('password', pass)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === '42P01') {
+          throw new Error("La table 'utilisateurs' n'existe pas dans Supabase. Veuillez vous connecter à votre console Supabase, ouvrir l'onglet 'SQL Editor' et exécuter le script SQL fourni dans le guide d'implémentation.");
+        }
+        throw error;
+      }
+
+      if (data) {
+        setIsLoggedIn(true);
+        setLoggedInUser(user);
+        localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('loggedInUser', user);
+        setAuthError('');
+      } else {
+        setAuthError('Identifiants incorrects. Veuillez vérifier.');
+      }
+    } catch (err) {
+      console.error("Erreur de connexion:", err);
+      setAuthError(err.message || "Erreur de liaison avec la base de données.");
     }
   };
 
   // Handle Logout
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setLoggedInUser('');
     localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('loggedInUser');
     localStorage.removeItem('currentTab');
     setCurrentTab('dashboard');
     resetStepFlow();
@@ -548,6 +581,7 @@ function App() {
     setClimPower('');
     setClimDate(new Date().toISOString().split('T')[0]);
     setClimPhoto(null);
+    setClimIsLocation(false);
     setShowAddFormOverride(false);
   };
 
@@ -662,6 +696,8 @@ function App() {
         puissance: climPower ? Number(climPower) : null,
         date_pose: climDate,
         photo_url: photoUrl,
+        is_location: climIsLocation,
+        enregistre_par: loggedInUser || 'admin',
         date_ajout: new Date().toISOString().split('T')[0]
       };
 
@@ -713,6 +749,7 @@ function App() {
     setEditClimPower(clim.puissance || '');
     setEditClimDate(clim.date_pose);
     setEditClimPhoto(clim.photo_url || null);
+    setEditClimIsLocation(!!clim.is_location);
   };
 
   // Handle edit form photo upload & compression
@@ -779,7 +816,9 @@ function App() {
           type: editClimType,
           puissance: editClimPower ? parseInt(editClimPower, 10) : null,
           date_pose: editClimDate,
-          photo_url: photoUrl
+          photo_url: photoUrl,
+          is_location: editClimIsLocation,
+          enregistre_par: loggedInUser || 'admin'
         })
         .eq('id', editingClimId);
 
@@ -862,7 +901,7 @@ function App() {
     doc.setDrawColor(226, 232, 240); 
     doc.line(14, 36, 196, 36);
 
-    const headers = [["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Date de Pose"]];
+    const headers = [["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Location", "Date de Pose", "Opérateur"]];
     const rows = sortedData.map(c => [
       c.site,
       c.batiment,
@@ -871,7 +910,9 @@ function App() {
       c.numero,
       c.type.toUpperCase(),
       c.puissance ? `${c.puissance} W` : '-',
-      formatDateFR(c.date_pose)
+      c.is_location ? 'OUI' : 'NON',
+      formatDateFR(c.date_pose),
+      c.enregistre_par || '-'
     ]);
 
     autoTable(doc, {
@@ -882,22 +923,24 @@ function App() {
       headStyles: {
         fillColor: [2, 132, 199], 
         textColor: [255, 255, 255],
-        fontSize: 9,
+        fontSize: 8.5,
         fontStyle: 'bold'
       },
       bodyStyles: {
-        fontSize: 8.5,
+        fontSize: 7.5,
         textColor: [30, 41, 59] 
       },
       columnStyles: {
-        0: { cellWidth: 32 }, 
-        1: { cellWidth: 32 }, 
-        2: { cellWidth: 15 }, 
-        3: { cellWidth: 28 }, 
-        4: { cellWidth: 28 }, 
-        5: { cellWidth: 20 }, 
-        6: { cellWidth: 20 }, 
-        7: { cellWidth: 20 }  
+        0: { cellWidth: 22 }, 
+        1: { cellWidth: 22 }, 
+        2: { cellWidth: 12 }, 
+        3: { cellWidth: 22 }, 
+        4: { cellWidth: 22 }, 
+        5: { cellWidth: 15 }, 
+        6: { cellWidth: 15 }, 
+        7: { cellWidth: 15 },
+        8: { cellWidth: 18 },
+        9: { cellWidth: 19 }
       },
       margin: { top: 40, left: 14, right: 14 },
       didDrawPage: (data) => {
@@ -1629,6 +1672,31 @@ function App() {
                                       required
                                     />
                                   </div>
+                                  <div className="form-group">
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '600' }}>Matériel de location ?</label>
+                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.4rem', height: 'var(--input-height)', alignItems: 'center' }}>
+                                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                                        <input 
+                                          type="radio" 
+                                          name={`edit-inline-location-${clim.id}`}
+                                          checked={editClimIsLocation === true}
+                                          onChange={() => setEditClimIsLocation(true)}
+                                          style={{ accentColor: 'var(--primary)', width: '15px', height: '15px' }}
+                                        />
+                                        Oui
+                                      </label>
+                                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                                        <input 
+                                          type="radio" 
+                                          name={`edit-inline-location-${clim.id}`}
+                                          checked={editClimIsLocation === false}
+                                          onChange={() => setEditClimIsLocation(false)}
+                                          style={{ accentColor: 'var(--primary)', width: '15px', height: '15px' }}
+                                        />
+                                        Non
+                                      </label>
+                                    </div>
+                                  </div>
                                 </div>
 
                                 <div className="form-group" style={{ marginTop: '0.25rem' }}>
@@ -1722,6 +1790,14 @@ function App() {
                                 <div className="detail-item">
                                   <span className="detail-label">Date de pose</span>
                                   <span className="detail-value">{formatDateFR(clim.date_pose)}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Location ?</span>
+                                  <span className="detail-value">{clim.is_location ? 'Oui' : 'Non'}</span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Enregistré par</span>
+                                  <span className="detail-value" style={{ textTransform: 'capitalize' }}>{clim.enregistre_par || '-'}</span>
                                 </div>
                                 <div className="detail-item">
                                   <span className="detail-label">Ajouté le</span>
@@ -1837,6 +1913,32 @@ function App() {
                                 onChange={(e) => setClimDate(e.target.value)}
                                 required 
                               />
+                            </div>
+
+                            <div className="form-group">
+                              <label style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Matériel de location ?</label>
+                              <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.4rem', height: 'var(--input-height)', alignItems: 'center' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                                  <input 
+                                    type="radio" 
+                                    name="climIsLocation"
+                                    checked={climIsLocation === true}
+                                    onChange={() => setClimIsLocation(true)}
+                                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                                  />
+                                  Oui
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                                  <input 
+                                    type="radio" 
+                                    name="climIsLocation"
+                                    checked={climIsLocation === false}
+                                    onChange={() => setClimIsLocation(false)}
+                                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                                  />
+                                  Non (Achat)
+                                </label>
+                              </div>
                             </div>
 
                           </div>
@@ -1987,6 +2089,8 @@ function App() {
                             <th>N° Climatiseur</th>
                             <th>Type</th>
                             <th>Puissance</th>
+                            <th>Location</th>
+                            <th>Opérateur</th>
                             <th>Date de Pose</th>
                             <th style={{ width: '60px', textAlign: 'center' }}>Suppr.</th>
                           </tr>
@@ -2017,6 +2121,8 @@ function App() {
                                 </span>
                               </td>
                               <td data-label="Puissance">{clim.puissance ? `${clim.puissance} W` : '-'}</td>
+                              <td data-label="Location">{clim.is_location ? 'Oui' : 'Non'}</td>
+                              <td data-label="Opérateur" style={{ textTransform: 'capitalize' }}>{clim.enregistre_par || '-'}</td>
                               <td data-label="Date de Pose">{formatDateFR(clim.date_pose)}</td>
                               <td data-label="Actions" style={{ textAlign: 'center' }}>
                                 <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
@@ -2078,6 +2184,14 @@ function App() {
                               <div className="report-card-row">
                                 <span className="report-card-label">📅 Date de pose</span>
                                 <span className="report-card-value">{formatDateFR(clim.date_pose)}</span>
+                              </div>
+                              <div className="report-card-row">
+                                <span className="report-card-label">🔑 Location ?</span>
+                                <span className="report-card-value">{clim.is_location ? 'Oui' : 'Non'}</span>
+                              </div>
+                              <div className="report-card-row">
+                                <span className="report-card-label">👤 Enregistré par</span>
+                                <span className="report-card-value" style={{ textTransform: 'capitalize' }}>{clim.enregistre_par || '-'}</span>
                               </div>
                             </div>
 
@@ -2191,6 +2305,32 @@ function App() {
                         onChange={(e) => setEditClimDate(e.target.value)}
                         required 
                       />
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Matériel de location ?</label>
+                      <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.4rem', height: 'var(--input-height)', alignItems: 'center' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                          <input 
+                            type="radio" 
+                            name="editInvIsLocation"
+                            checked={editClimIsLocation === true}
+                            onChange={() => setEditClimIsLocation(true)}
+                            style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                          />
+                          Oui
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                          <input 
+                            type="radio" 
+                            name="editInvIsLocation"
+                            checked={editClimIsLocation === false}
+                            onChange={() => setEditClimIsLocation(false)}
+                            style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                          />
+                          Non
+                        </label>
+                      </div>
                     </div>
 
                     <div className="form-group">
