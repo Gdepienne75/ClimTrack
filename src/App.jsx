@@ -145,19 +145,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState('site');
   const [sortDirection, setSortDirection] = useState('asc');
-  const [columnFilters, setColumnFilters] = useState({
-    site: '',
-    batiment: '',
-    etage: '',
-    localisation: '',
-    numero: '',
-    type: '',
-    puissance: '',
-    type_contrat: '',
-    enregistre_par: '',
-    date_pose: '',
-    observations: ''
-  });
+  const [selectedSites, setSelectedSites] = useState([]);
+  const [selectedBatiments, setSelectedBatiments] = useState([]);
+  const [selectedTypeContrat, setSelectedTypeContrat] = useState('');
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
 
   // Editing Climatiseur states
@@ -170,6 +160,8 @@ function App() {
   const [editClimTypeContrat, setEditClimTypeContrat] = useState('achat');
   const [editClimObservations, setEditClimObservations] = useState('');
   const [showInventoryEditModal, setShowInventoryEditModal] = useState(false);
+  const [selectedDetailClim, setSelectedDetailClim] = useState(null);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
 
   // Toast message
   const [toastMessage, setToastMessage] = useState('');
@@ -913,12 +905,27 @@ function App() {
     }
   };
 
-  // Update specific column filter
-  const handleColumnFilterChange = (field, value) => {
-    setColumnFilters(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  // Toggle Site and Batiment Filters
+  const handleToggleSiteFilter = (site) => {
+    setSelectedSites(prev => 
+      prev.includes(site) ? prev.filter(s => s !== site) : [...prev, site]
+    );
+    setSelectedBatiments([]); // Clear buildings when sites change to avoid invalid filters
+  };
+
+  const handleToggleBatimentFilter = (batiment) => {
+    setSelectedBatiments(prev => 
+      prev.includes(batiment) ? prev.filter(b => b !== batiment) : [...prev, batiment]
+    );
+  };
+
+  // Get available buildings dynamically based on selected sites
+  const getAvailableBatiments = () => {
+    const list = selectedSites.length > 0
+      ? climatiseurs.filter(c => c.site && selectedSites.includes(c.site))
+      : climatiseurs;
+    const uniqueBatiments = [...new Set(list.map(c => c.batiment).filter(Boolean))];
+    return uniqueBatiments.sort();
   };
 
   // Clear all filters
@@ -926,19 +933,9 @@ function App() {
     setSearchQuery('');
     setSortField('site');
     setSortDirection('asc');
-    setColumnFilters({
-      site: '',
-      batiment: '',
-      etage: '',
-      localisation: '',
-      numero: '',
-      type: '',
-      puissance: '',
-      type_contrat: '',
-      enregistre_par: '',
-      date_pose: '',
-      observations: ''
-    });
+    setSelectedSites([]);
+    setSelectedBatiments([]);
+    setSelectedTypeContrat('');
   };
 
   // Sort and filter list for reports
@@ -962,20 +959,16 @@ function App() {
       );
     }
 
-    // 2. Column-specific Filters
-    Object.keys(columnFilters).forEach(key => {
-      const filterValue = columnFilters[key];
-      if (filterValue && String(filterValue).trim()) {
-        const val = String(filterValue).toLowerCase().trim();
-        if (key === 'type' || key === 'type_contrat') {
-          // Dropdowns: exact match
-          list = list.filter(c => c[key] && c[key].toLowerCase() === val);
-        } else {
-          // Text inputs: partial match
-          list = list.filter(c => c[key] && String(c[key]).toLowerCase().includes(val));
-        }
-      }
-    });
+    // 2. Multi-select Filters (Site, Batiment) and Contrat Select
+    if (selectedSites.length > 0) {
+      list = list.filter(c => c.site && selectedSites.includes(c.site));
+    }
+    if (selectedBatiments.length > 0) {
+      list = list.filter(c => c.batiment && selectedBatiments.includes(c.batiment));
+    }
+    if (selectedTypeContrat) {
+      list = list.filter(c => c.type_contrat && c.type_contrat.toLowerCase() === selectedTypeContrat.toLowerCase());
+    }
 
     // 3. Sorting
     list.sort((a, b) => {
@@ -2252,240 +2245,206 @@ function App() {
                      </div>
                      
                      <button 
-                       className={`btn ${showFiltersPanel ? 'btn-primary' : 'btn-secondary'}`} 
-                       onClick={() => setShowFiltersPanel(!showFiltersPanel)}
-                       style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: 'var(--input-height)', fontSize: '0.85rem' }}
-                     >
-                       ⚙️ Filtres avancés {Object.values(columnFilters).filter(v => v).length > 0 && `(${Object.values(columnFilters).filter(v => v).length})`}
-                     </button>
+                        className={`btn ${showFiltersPanel ? 'btn-primary' : 'btn-secondary'}`} 
+                        onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: 'var(--input-height)', fontSize: '0.85rem' }}
+                      >
+                        ⚙️ Filtres avancés {(selectedSites.length + selectedBatiments.length + (selectedTypeContrat ? 1 : 0)) > 0 && `(${selectedSites.length + selectedBatiments.length + (selectedTypeContrat ? 1 : 0)})`}
+                      </button>
 
-                     {(searchQuery || Object.values(columnFilters).some(v => v) || sortField !== 'site' || sortDirection !== 'asc') && (
-                       <button className="btn btn-secondary" onClick={clearAllFilters} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: 'var(--input-height)', fontSize: '0.85rem' }}>
-                         Refaire
-                       </button>
-                     )}
-                   </div>
+                      {(searchQuery || selectedSites.length > 0 || selectedBatiments.length > 0 || selectedTypeContrat || sortField !== 'site' || sortDirection !== 'asc') && (
+                        <button className="btn btn-secondary" onClick={clearAllFilters} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: 'var(--input-height)', fontSize: '0.85rem' }}>
+                          Refaire
+                        </button>
+                      )}
+                    </div>
 
-                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                     <button className="btn btn-primary" onClick={generatePDF} disabled={getSortedClimatiseurs().length === 0}>
-                       <IconFileText /> PDF (Paysage)
-                     </button>
-                     <button 
-                       className="btn btn-success" 
-                       onClick={generateExcel} 
-                       style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#16a34a', borderColor: '#16a34a', color: 'white' }}
-                       disabled={getSortedClimatiseurs().length === 0}
-                     >
-                       📊 Excel
-                     </button>
-                   </div>
-                 </div>
+                    {/* Exporter Dropdown List */}
+                    <div style={{ position: 'relative' }}>
+                      <button 
+                        className="btn btn-primary" 
+                        onClick={() => setShowExportDropdown(!showExportDropdown)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: 'var(--input-height)' }}
+                        disabled={getSortedClimatiseurs().length === 0}
+                      >
+                        📤 Générer Rapport <span style={{ fontSize: '0.65rem', marginLeft: '0.2rem' }}>▼</span>
+                      </button>
+                      {showExportDropdown && (
+                        <>
+                          <div 
+                            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} 
+                            onClick={() => setShowExportDropdown(false)}
+                          />
+                          <div 
+                            className="card animate-fade-in" 
+                            style={{ position: 'absolute', right: 0, top: 'calc(100% + 5px)', minWidth: '180px', padding: '0.5rem 0', zIndex: 999, border: '1px solid var(--border-light)', boxShadow: 'var(--elevation-2)', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)' }}
+                          >
+                            <button 
+                              className="dropdown-item" 
+                              style={{ width: '100%', border: '0', background: 'transparent', textAlign: 'left', padding: '0.6rem 1rem', fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '500' }}
+                              onClick={() => {
+                                setShowExportDropdown(false);
+                                generatePDF();
+                              }}
+                            >
+                              <IconFileText /> PDF (Paysage)
+                            </button>
+                            <button 
+                              className="dropdown-item" 
+                              style={{ width: '100%', border: '0', background: 'transparent', textAlign: 'left', padding: '0.6rem 1rem', fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '500' }}
+                              onClick={() => {
+                                setShowExportDropdown(false);
+                                generateExcel();
+                              }}
+                            >
+                              📊 Excel (CSV)
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-                 {/* Active Filter Badges */}
-                 {Object.values(columnFilters).some(v => v) && (
-                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0 0.25rem' }}>
-                     {Object.entries(columnFilters).map(([key, val]) => {
-                       if (!val) return null;
-                       const labelMap = {
-                         site: 'Site',
-                         batiment: 'Bâtiment',
-                         etage: 'Niveau',
-                         localisation: 'Localisation',
-                         numero: 'N° Clim',
-                         type: 'Type',
-                         puissance: 'Puissance',
-                         type_contrat: 'Contrat',
-                         enregistre_par: 'Opérateur',
-                         date_pose: 'Date de pose',
-                         observations: 'Observations'
-                       };
-                       return (
-                         <span key={key} className="active-filter-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'var(--primary-container)', color: 'var(--on-primary-container)', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: '500', border: '1px solid var(--border-light)' }}>
-                           <strong>{labelMap[key]} :</strong> {val}
-                           <span style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginLeft: '0.2rem' }} onClick={() => handleColumnFilterChange(key, '')}>✖</span>
-                         </span>
-                       );
-                     })}
-                   </div>
-                 )}
+                  {/* Active Filter Badges */}
+                  {(selectedSites.length > 0 || selectedBatiments.length > 0 || selectedTypeContrat) && (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0 0.25rem' }}>
+                      {selectedSites.map(site => (
+                        <span key={`site-${site}`} className="active-filter-badge">
+                          <strong>Site:</strong> {site}
+                          <span style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginLeft: '0.2rem' }} onClick={() => handleToggleSiteFilter(site)}>✖</span>
+                        </span>
+                      ))}
+                      {selectedBatiments.map(bat => (
+                        <span key={`bat-${bat}`} className="active-filter-badge">
+                          <strong>Bât:</strong> {bat}
+                          <span style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginLeft: '0.2rem' }} onClick={() => handleToggleBatimentFilter(bat)}>✖</span>
+                        </span>
+                      ))}
+                      {selectedTypeContrat && (
+                        <span className="active-filter-badge">
+                          <strong>Contrat:</strong> {selectedTypeContrat}
+                          <span style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem', marginLeft: '0.2rem' }} onClick={() => setSelectedTypeContrat('')}>✖</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
 
-                 {/* Advanced Filters Drawer Panel */}
-                 {showFiltersPanel && (
-                   <div className="card filters-drawer-card animate-fade-in" style={{ padding: '1.25rem', marginBottom: '1.25rem', border: '1px solid var(--border-light)', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--elevation-1)' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                       <span style={{ fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-primary)' }}>
-                         ⚙️ Paramètres de filtrage avancé
-                       </span>
-                       <button className="btn btn-secondary btn-sm" onClick={() => setShowFiltersPanel(false)} style={{ padding: '0.25rem 0.5rem', minWidth: 'auto', fontSize: '0.75rem' }}>
-                         Masquer
-                       </button>
-                     </div>
+                  {/* Advanced Filters Drawer Panel */}
+                  {showFiltersPanel && (
+                    <div className="card filters-drawer-card animate-fade-in" style={{ padding: '1.25rem', marginBottom: '1.25rem', border: '1px solid var(--border-light)', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--elevation-1)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                        <span style={{ fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-primary)' }}>
+                          ⚙️ Paramètres de filtrage
+                        </span>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setShowFiltersPanel(false)} style={{ padding: '0.25rem 0.5rem', minWidth: 'auto', fontSize: '0.75rem' }}>
+                          Masquer
+                        </button>
+                      </div>
 
-                     {/* Mobile Sorting Controls */}
-                     <div className="mobile-only" style={{ marginBottom: '1rem' }}>
-                       <label style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>Trier par</label>
-                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                         <select 
-                           className="input-control no-icon" 
-                           style={{ flex: 1, fontSize: '0.85rem', height: '36px', padding: '0 0.5rem' }}
-                           value={sortField}
-                           onChange={(e) => setSortField(e.target.value)}
-                         >
-                           <option value="site">Site</option>
-                           <option value="batiment">Bâtiment</option>
-                           <option value="etage">Niveau (Étage)</option>
-                           <option value="localisation">Localisation</option>
-                           <option value="numero">N° Climatiseur</option>
-                           <option value="type">Type</option>
-                           <option value="puissance">Puissance</option>
-                           <option value="type_contrat">Contrat</option>
-                           <option value="enregistre_par">Opérateur</option>
-                           <option value="date_pose">Date de pose</option>
-                           <option value="observations">Observations</option>
-                         </select>
-                         <select 
-                           className="input-control no-icon" 
-                           style={{ width: '95px', fontSize: '0.85rem', height: '36px', padding: '0 0.5rem' }}
-                           value={sortDirection}
-                           onChange={(e) => setSortDirection(e.target.value)}
-                         >
-                           <option value="asc">Croissant</option>
-                           <option value="desc">Décroissant</option>
-                         </select>
-                       </div>
-                       <hr style={{ margin: '1rem 0 0.5rem 0', border: '0', borderTop: '1px solid var(--border-light)' }} />
-                     </div>
+                      {/* Mobile Sorting Controls */}
+                      <div className="mobile-only" style={{ marginBottom: '1.25rem' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>Trier par</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <select 
+                            className="input-control no-icon" 
+                            style={{ flex: 1, fontSize: '0.85rem', height: '36px', padding: '0 0.5rem' }}
+                            value={sortField}
+                            onChange={(e) => setSortField(e.target.value)}
+                          >
+                            <option value="site">Site</option>
+                            <option value="batiment">Bâtiment</option>
+                            <option value="etage">Niveau (Étage)</option>
+                            <option value="localisation">Localisation</option>
+                            <option value="numero">N° Climatiseur</option>
+                            <option value="type">Type</option>
+                            <option value="puissance">Puissance</option>
+                            <option value="type_contrat">Contrat</option>
+                            <option value="enregistre_par">Opérateur</option>
+                            <option value="date_pose">Date de pose</option>
+                            <option value="observations">Observations</option>
+                          </select>
+                          <select 
+                            className="input-control no-icon" 
+                            style={{ width: '95px', fontSize: '0.85rem', height: '36px', padding: '0 0.5rem' }}
+                            value={sortDirection}
+                            onChange={(e) => setSortDirection(e.target.value)}
+                          >
+                            <option value="asc">Croissant</option>
+                            <option value="desc">Décroissant</option>
+                          </select>
+                        </div>
+                        <hr style={{ margin: '1.25rem 0 0.75rem 0', border: '0', borderTop: '1px solid var(--border-light)' }} />
+                      </div>
 
-                     <div className="filters-grid">
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Site</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par site..."
-                           value={columnFilters.site}
-                           onChange={(e) => handleColumnFilterChange('site', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Bâtiment</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par bâtiment..."
-                           value={columnFilters.batiment}
-                           onChange={(e) => handleColumnFilterChange('batiment', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Niveau</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par niveau..."
-                           value={columnFilters.etage}
-                           onChange={(e) => handleColumnFilterChange('etage', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Localisation</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par pièce/local..."
-                           value={columnFilters.localisation}
-                           onChange={(e) => handleColumnFilterChange('localisation', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>N° Climatiseur</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par N°..."
-                           value={columnFilters.numero}
-                           onChange={(e) => handleColumnFilterChange('numero', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Type de climatiseur</label>
-                         <select 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem', padding: '0 0.5rem' }}
-                           value={columnFilters.type}
-                           onChange={(e) => handleColumnFilterChange('type', e.target.value)}
-                         >
-                           <option value="">Tous les types</option>
-                           <option value="monobloc">Monobloc</option>
-                           <option value="split">Split</option>
-                         </select>
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Puissance (Watts)</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par puissance..."
-                           value={columnFilters.puissance}
-                           onChange={(e) => handleColumnFilterChange('puissance', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Type de contrat</label>
-                         <select 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem', padding: '0 0.5rem' }}
-                           value={columnFilters.type_contrat}
-                           onChange={(e) => handleColumnFilterChange('type_contrat', e.target.value)}
-                         >
-                           <option value="">Tous les contrats</option>
-                           <option value="achat">Achat</option>
-                           <option value="location">Location</option>
-                           <option value="personnel">Personnel</option>
-                         </select>
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Opérateur</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par opérateur..."
-                           value={columnFilters.enregistre_par}
-                           onChange={(e) => handleColumnFilterChange('enregistre_par', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Date de pose</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par date..."
-                           value={columnFilters.date_pose}
-                           onChange={(e) => handleColumnFilterChange('date_pose', e.target.value)}
-                         />
-                       </div>
-                       <div className="form-group" style={{ gridColumn: 'span 2', marginBottom: 0 }}>
-                         <label style={{ fontSize: '0.75rem', fontWeight: '600', display: 'block', marginBottom: '0.25rem' }}>Observations</label>
-                         <input 
-                           type="text" 
-                           className="input-control no-icon"
-                           style={{ height: '36px', fontSize: '0.85rem' }}
-                           placeholder="Filtrer par remarques..."
-                           value={columnFilters.observations}
-                           onChange={(e) => handleColumnFilterChange('observations', e.target.value)}
-                         />
-                       </div>
-                     </div>
-                   </div>
-                 )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        {/* 1. Sites Multi-select Pills list */}
+                        <div>
+                          <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem' }}>
+                            Sites ({selectedSites.length} sélectionné{selectedSites.length > 1 && 's'})
+                          </label>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {[...new Set(climatiseurs.map(c => c.site).filter(Boolean))].sort().map(site => {
+                              const isSelected = selectedSites.includes(site);
+                              return (
+                                <button
+                                  key={`site-pill-${site}`}
+                                  type="button"
+                                  className={`filter-pill ${isSelected ? 'active' : ''}`}
+                                  onClick={() => handleToggleSiteFilter(site)}
+                                >
+                                  {isSelected ? '✓' : '+'} {site}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* 2. Batiment Multi-select Pills list */}
+                        <div>
+                          <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem' }}>
+                            Bâtiments ({selectedBatiments.length} sélectionné{selectedBatiments.length > 1 && 's'})
+                          </label>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {getAvailableBatiments().length === 0 ? (
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun bâtiment disponible</span>
+                            ) : (
+                              getAvailableBatiments().map(bat => {
+                                const isSelected = selectedBatiments.includes(bat);
+                                return (
+                                  <button
+                                    key={`bat-pill-${bat}`}
+                                    type="button"
+                                    className={`filter-pill ${isSelected ? 'active' : ''}`}
+                                    onClick={() => handleToggleBatimentFilter(bat)}
+                                  >
+                                    {isSelected ? '✓' : '+'} {bat}
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 3. Contrat Type Select Dropdown */}
+                        <div style={{ maxWidth: '280px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>
+                            Type de contrat
+                          </label>
+                          <select 
+                            className="input-control no-icon"
+                            style={{ height: '36px', fontSize: '0.85rem', padding: '0 0.5rem' }}
+                            value={selectedTypeContrat}
+                            onChange={(e) => setSelectedTypeContrat(e.target.value)}
+                          >
+                            <option value="">Tous les contrats</option>
+                            <option value="achat">Achat</option>
+                            <option value="location">Location</option>
+                            <option value="personnel">Personnel</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Inventory View: Desktop Table & Mobile Cards */}
                 {getSortedClimatiseurs().length > 0 ? (
@@ -2534,7 +2493,17 @@ function App() {
                         </thead>
                         <tbody>
                           {getSortedClimatiseurs().map((clim) => (
-                            <tr key={clim.id}>
+                            <tr 
+                              key={clim.id}
+                              className="clickable-row"
+                              style={{ cursor: 'pointer' }}
+                              onClick={(e) => {
+                                if (e.target.closest('td[data-label="Actions"]') || e.target.closest('.table-thumb') || e.target.closest('button')) {
+                                  return;
+                                }
+                                setSelectedDetailClim(clim);
+                              }}
+                            >
                               <td data-label="Photo">
                                 {clim.photo_url ? (
                                   <img 
@@ -2596,7 +2565,17 @@ function App() {
                     {/* Mobile cards layout */}
                     <div className="mobile-only report-cards-grid">
                       {getSortedClimatiseurs().map((clim) => (
-                        <div key={clim.id} className="report-card">
+                        <div 
+                          key={clim.id} 
+                          className="report-card clickable-row"
+                          style={{ cursor: 'pointer' }}
+                          onClick={(e) => {
+                            if (e.target.closest('.report-card-footer') || e.target.closest('.report-card-image') || e.target.closest('button')) {
+                              return;
+                            }
+                            setSelectedDetailClim(clim);
+                          }}
+                        >
                           {clim.photo_url && (
                             <div 
                               className="report-card-image" 
@@ -2848,6 +2827,115 @@ function App() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* --- EQUIPMENT DETAILS MODAL (Read-Only) --- */}
+          {selectedDetailClim && (
+            <div className="modal-backdrop animate-fade-in" onClick={() => setSelectedDetailClim(null)}>
+              <div className="modal" style={{ maxWidth: '800px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2 className="modal-title">
+                    📋 Fiche Technique : N° {selectedDetailClim.numero}
+                  </h2>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} 
+                    onClick={() => setSelectedDetailClim(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <div className="modal-body responsive-modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  {/* Left Column: Details */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>📍 EMPLACEMENT</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-primary)' }}>
+                        {selectedDetailClim.site} • {selectedDetailClim.batiment}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>🏢 NIVEAU & PIÈCE</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-primary)' }}>
+                        Niveau {selectedDetailClim.etage} • {selectedDetailClim.localisation}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>⚙️ CARACTÉRISTIQUES</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-primary)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <span className={`fiche-badge ${selectedDetailClim.type}`} style={{ display: 'inline-block' }}>
+                          {selectedDetailClim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                        </span>
+                        <span>• {selectedDetailClim.puissance ? `${selectedDetailClim.puissance} W` : 'Puissance non spécifiée'}</span>
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>🔑 CONTRAT</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                        Contrat en {selectedDetailClim.type_contrat || 'achat'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>👤 ENREGISTREMENT</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-primary)' }}>
+                        Enregistré par <span style={{ textTransform: 'capitalize', fontWeight: 'bold' }}>{selectedDetailClim.enregistre_par || 'admin'}</span> le {formatDateFR(selectedDetailClim.date_pose)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>📝 OBSERVATIONS</span>
+                      <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', margin: '0.25rem 0 0 0', fontStyle: 'italic', lineHeight: '1.4' }}>
+                        {selectedDetailClim.observations || 'Aucune observation enregistrée.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Photo */}
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', border: '1px dashed var(--border-light)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--background)', minHeight: '260px', overflow: 'hidden' }}>
+                    {selectedDetailClim.photo_url ? (
+                      <img 
+                        src={selectedDetailClim.photo_url} 
+                        alt={`Équipement N° ${selectedDetailClim.numero}`} 
+                        style={{ width: '100%', height: '100%', objectFit: 'contain', maxHeight: '340px' }}
+                      />
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: '2rem' }}>💨</span>
+                        <span style={{ fontSize: '0.85rem' }}>Aucune photo pour cet équipement</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                  {!isReadOnly && (
+                    <button 
+                      type="button" 
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setSelectedDetailClim(null);
+                        startEditing(selectedDetailClim);
+                        setShowInventoryEditModal(true);
+                      }}
+                    >
+                      ✏️ Modifier
+                    </button>
+                  )}
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setSelectedDetailClim(null)}
+                  >
+                    Fermer
+                  </button>
+                </div>
               </div>
             </div>
           )}

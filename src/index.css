@@ -1365,3 +1365,51 @@ body {
     transform: scale(1);
   }
 }
+
+/* --- Multi-select filter pills --- */
+.filter-pill {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all var(--transition-fast);
+  outline: none;
+  user-select: none;
+}
+
+.filter-pill:hover {
+  background-color: var(--background);
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.filter-pill.active {
+  background-color: var(--primary-container);
+  color: var(--on-primary-container);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(103, 80, 164, 0.15);
+}
+
+/* --- Clickable rows --- */
+.clickable-row {
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.clickable-row:hover {
+  background-color: rgba(103, 80, 164, 0.04) !important;
+}
+
+/* --- Responsive Modal Body --- */
+@media (max-width: 768px) {
+  .responsive-modal-body {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+}
