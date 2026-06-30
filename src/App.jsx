@@ -143,8 +143,22 @@ function App() {
 
   // Filter/Search states in reports
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterSite, setFilterSite] = useState('');
-  const [filterType, setFilterType] = useState('');
+  const [sortField, setSortField] = useState('site');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [columnFilters, setColumnFilters] = useState({
+    site: '',
+    batiment: '',
+    etage: '',
+    localisation: '',
+    numero: '',
+    type: '',
+    puissance: '',
+    type_contrat: '',
+    enregistre_par: '',
+    date_pose: '',
+    observations: ''
+  });
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Editing Climatiseur states
   const [editingClimId, setEditingClimId] = useState(null);
@@ -889,48 +903,110 @@ function App() {
     }
   };
 
-  // Dynamic site filter suggestions built from the registered climatiseurs
-  const getSitesSuggestions = () => {
-    const list = climatiseurs.map(c => c.site);
-    return Array.from(new Set(list)).filter(s => s).sort();
+  // Toggle column sorting
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Update specific column filter
+  const handleColumnFilterChange = (field, value) => {
+    setColumnFilters(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setColumnFilters({
+      site: '',
+      batiment: '',
+      etage: '',
+      localisation: '',
+      numero: '',
+      type: '',
+      puissance: '',
+      type_contrat: '',
+      enregistre_par: '',
+      date_pose: '',
+      observations: ''
+    });
   };
 
   // Sort and filter list for reports
   const getSortedClimatiseurs = () => {
     let list = [...climatiseurs];
 
-    if (filterSite) {
-      list = list.filter(c => c.site === filterSite);
-    }
-    if (filterType) {
-      list = list.filter(c => c.type === filterType);
-    }
+    // 1. Global Search Query
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       list = list.filter(c => 
-        c.numero.toLowerCase().includes(q) ||
-        c.localisation.toLowerCase().includes(q) ||
-        c.batiment.toLowerCase().includes(q) ||
-        c.site.toLowerCase().includes(q)
+        (c.numero && c.numero.toLowerCase().includes(q)) ||
+        (c.localisation && c.localisation.toLowerCase().includes(q)) ||
+        (c.batiment && c.batiment.toLowerCase().includes(q)) ||
+        (c.site && c.site.toLowerCase().includes(q)) ||
+        (c.etage && c.etage.toLowerCase().includes(q)) ||
+        (c.type && c.type.toLowerCase().includes(q)) ||
+        (c.puissance && String(c.puissance).includes(q)) ||
+        (c.type_contrat && c.type_contrat.toLowerCase().includes(q)) ||
+        (c.enregistre_par && c.enregistre_par.toLowerCase().includes(q)) ||
+        (c.observations && c.observations.toLowerCase().includes(q))
       );
     }
 
-    // Sort location hierarchy
-    return list.sort((a, b) => {
-      const siteCompare = a.site.localeCompare(b.site);
-      if (siteCompare !== 0) return siteCompare;
-      
-      const batCompare = a.batiment.localeCompare(b.batiment);
-      if (batCompare !== 0) return batCompare;
-      
-      const floorCompare = a.etage.localeCompare(b.etage);
-      if (floorCompare !== 0) return floorCompare;
-      
-      return a.localisation.localeCompare(b.localisation);
+    // 2. Column-specific Filters
+    Object.keys(columnFilters).forEach(key => {
+      const filterValue = columnFilters[key];
+      if (filterValue && String(filterValue).trim()) {
+        const val = String(filterValue).toLowerCase().trim();
+        if (key === 'type' || key === 'type_contrat') {
+          // Dropdowns: exact match
+          list = list.filter(c => c[key] && c[key].toLowerCase() === val);
+        } else {
+          // Text inputs: partial match
+          list = list.filter(c => c[key] && String(c[key]).toLowerCase().includes(val));
+        }
+      }
     });
+
+    // 3. Sorting
+    list.sort((a, b) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+
+      if (valA === null || valA === undefined) valA = '';
+      if (valB === null || valB === undefined) valB = '';
+
+      let comparison = 0;
+      if (sortField === 'puissance') {
+        comparison = Number(valA) - Number(valB);
+      } else if (sortField === 'date_pose') {
+        comparison = new Date(valA) - new Date(valB);
+      } else {
+        comparison = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return list;
   };
 
-  // Generate PDF Report Client-side
+  // Render sorting arrows dynamically
+  const renderSortIcon = (field) => {
+    if (sortField !== field) return <span style={{ color: 'var(--text-muted)', marginLeft: '0.25rem', opacity: '0.4', fontSize: '0.75rem' }}>↕</span>;
+    return sortDirection === 'asc' 
+      ? <span style={{ color: 'var(--primary)', marginLeft: '0.25rem', fontWeight: 'bold', fontSize: '0.75rem' }}>▲</span> 
+      : <span style={{ color: 'var(--primary)', marginLeft: '0.25rem', fontWeight: 'bold', fontSize: '0.75rem' }}>▼</span>;
+  };
+
+  // Generate PDF Report Client-side (Landscape Format)
   const generatePDF = () => {
     const sortedData = getSortedClimatiseurs();
     if (sortedData.length === 0) {
@@ -938,7 +1014,12 @@ function App() {
       return;
     }
 
-    const doc = new jsPDF();
+    // 'l' orientation for landscape layout (A4: 297mm x 210mm)
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
     const currentDate = new Date().toLocaleDateString('fr-FR');
 
     doc.setFont("Helvetica", "bold");
@@ -953,7 +1034,7 @@ function App() {
     doc.text(`Nombre total d'équipements recensés : ${sortedData.length}`, 14, 31);
     
     doc.setDrawColor(226, 232, 240); 
-    doc.line(14, 36, 196, 36);
+    doc.line(14, 36, 283, 36); // Extended width for Landscape (297 - 14*2 = 269mm printable space)
 
     const headers = [["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Contrat", "Date de Pose", "Opérateur", "Observations"]];
     const rows = sortedData.map(c => [
@@ -978,36 +1059,77 @@ function App() {
       headStyles: {
         fillColor: [2, 132, 199], 
         textColor: [255, 255, 255],
-        fontSize: 8.5,
+        fontSize: 9,
         fontStyle: 'bold'
       },
       bodyStyles: {
-        fontSize: 7.5,
+        fontSize: 8,
         textColor: [30, 41, 59] 
       },
       columnStyles: {
-        0: { cellWidth: 17 }, 
-        1: { cellWidth: 17 }, 
-        2: { cellWidth: 10 }, 
-        3: { cellWidth: 17 }, 
-        4: { cellWidth: 17 }, 
-        5: { cellWidth: 13 }, 
-        6: { cellWidth: 13 }, 
-        7: { cellWidth: 15 },
-        8: { cellWidth: 15 },
-        9: { cellWidth: 15 },
-        10: { cellWidth: 25 }
+        0: { cellWidth: 25 }, 
+        1: { cellWidth: 25 }, 
+        2: { cellWidth: 18 }, 
+        3: { cellWidth: 25 }, 
+        4: { cellWidth: 25 }, 
+        5: { cellWidth: 18 }, 
+        6: { cellWidth: 18 }, 
+        7: { cellWidth: 20 },
+        8: { cellWidth: 22 },
+        9: { cellWidth: 23 },
+        10: { cellWidth: 50 }
       },
       margin: { top: 40, left: 14, right: 14 },
       didDrawPage: (data) => {
         const str = "Page " + doc.internal.getNumberOfPages();
         doc.setFontSize(8);
         doc.setTextColor(150, 150, 150);
-        doc.text(str, 196 - 15, doc.internal.pageSize.height - 10, { align: 'right' });
+        doc.text(str, 283, doc.internal.pageSize.height - 10, { align: 'right' });
       }
     });
 
     doc.save(`rapport_climatiseurs_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  // Generate Excel-compatible CSV Report Client-side
+  const generateExcel = () => {
+    const sortedData = getSortedClimatiseurs();
+    if (sortedData.length === 0) {
+      alert("Aucun climatiseur à exporter.");
+      return;
+    }
+
+    const headers = ["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Contrat", "Date de Pose", "Opérateur", "Observations"];
+    const rows = sortedData.map(c => [
+      c.site,
+      c.batiment,
+      c.etage,
+      c.localisation,
+      c.numero,
+      c.type === 'monobloc' ? 'Monobloc' : 'Split',
+      c.puissance ? `${c.puissance} W` : '-',
+      c.type_contrat || 'achat',
+      formatDateFR(c.date_pose),
+      c.enregistre_par || '-',
+      c.observations || '-'
+    ]);
+
+    // Semicolon separator and double quote wrappers for MS Excel compatibility in European localizations
+    const csvContent = [
+      headers.map(h => `"${h.replace(/"/g, '""')}"`).join(';'),
+      ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))
+    ].join('\n');
+
+    // UTF-8 BOM bytes (\uFEFF) to make sure French accentuation displays properly in MS Excel
+    const BOM = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([BOM, csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `rapport_inventaire_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -2113,46 +2235,40 @@ function App() {
                 <h1 className="dashboard-title">Inventaire général</h1>
                 <p className="dashboard-subtitle">Liste ordonnée de tous les climatiseurs recensés.</p>
 
-                {/* Filters Row */}
-                <div className="report-header-controls">
-                  <div className="filter-section">
-                    <div className="input-wrapper" style={{ flex: '1 1 200px' }}>
-                      <span className="input-icon"><IconSearch /></span>
-                      <input 
-                        type="text" 
-                        className="input-control" 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Chercher par N°, local, bâtiment..." 
-                      />
-                    </div>
+                 {/* Filters Row */}
+                 <div className="report-header-controls">
+                   <div className="filter-section">
+                     <div className="input-wrapper" style={{ flex: '1 1 250px' }}>
+                       <span className="input-icon"><IconSearch /></span>
+                       <input 
+                         type="text" 
+                         className="input-control" 
+                         value={searchQuery}
+                         onChange={(e) => setSearchQuery(e.target.value)}
+                         placeholder="Recherche globale..." 
+                       />
+                     </div>
+                     {(searchQuery || Object.values(columnFilters).some(v => v) || sortField !== 'site' || sortDirection !== 'asc') && (
+                       <button className="btn btn-secondary" onClick={clearAllFilters} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', height: 'var(--input-height)', fontSize: '0.85rem' }}>
+                         🧹 Réinitialiser
+                       </button>
+                     )}
+                   </div>
 
-                    <select 
-                      className="filter-select"
-                      value={filterSite}
-                      onChange={(e) => setFilterSite(e.target.value)}
-                    >
-                      <option value="">Tous les sites</option>
-                      {getSitesSuggestions().map((site, i) => (
-                        <option key={i} value={site}>{site}</option>
-                      ))}
-                    </select>
-
-                    <select 
-                      className="filter-select"
-                      value={filterType}
-                      onChange={(e) => setFilterType(e.target.value)}
-                    >
-                      <option value="">Tous les types</option>
-                      <option value="monobloc">Monobloc</option>
-                      <option value="split">Split</option>
-                    </select>
-                  </div>
-
-                  <button className="btn btn-primary" onClick={generatePDF} disabled={getSortedClimatiseurs().length === 0}>
-                    <IconFileText /> Télécharger PDF
-                  </button>
-                </div>
+                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                     <button className="btn btn-primary" onClick={generatePDF} disabled={getSortedClimatiseurs().length === 0}>
+                       <IconFileText /> PDF (Paysage)
+                     </button>
+                     <button 
+                       className="btn btn-success" 
+                       onClick={generateExcel} 
+                       style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#16a34a', borderColor: '#16a34a', color: 'white' }}
+                       disabled={getSortedClimatiseurs().length === 0}
+                     >
+                       📊 Excel
+                     </button>
+                   </div>
+                 </div>
 
                 {/* Inventory View: Desktop Table & Mobile Cards */}
                 {getSortedClimatiseurs().length > 0 ? (
@@ -2162,19 +2278,149 @@ function App() {
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>Photo</th>
-                            <th>Site</th>
-                            <th>Bâtiment</th>
-                            <th>Niveau</th>
-                            <th>Localisation</th>
-                            <th>N° Climatiseur</th>
-                            <th>Type</th>
-                            <th>Puissance</th>
-                            <th>Contrat</th>
-                            <th>Opérateur</th>
-                            <th>Date de Pose</th>
-                            <th>Observations</th>
+                            <th style={{ cursor: 'default' }}>Photo</th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('site')}>
+                              Site {renderSortIcon('site')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('batiment')}>
+                              Bâtiment {renderSortIcon('batiment')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('etage')}>
+                              Niveau {renderSortIcon('etage')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('localisation')}>
+                              Localisation {renderSortIcon('localisation')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('numero')}>
+                              N° Climatiseur {renderSortIcon('numero')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('type')}>
+                              Type {renderSortIcon('type')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('puissance')}>
+                              Puissance {renderSortIcon('puissance')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('type_contrat')}>
+                              Contrat {renderSortIcon('type_contrat')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('enregistre_par')}>
+                              Opérateur {renderSortIcon('enregistre_par')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('date_pose')}>
+                              Date de Pose {renderSortIcon('date_pose')}
+                            </th>
+                            <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('observations')}>
+                              Observations {renderSortIcon('observations')}
+                            </th>
                             {!isReadOnly && <th style={{ width: '60px', textAlign: 'center' }}>Actions</th>}
+                          </tr>
+                          <tr className="filter-inputs-row">
+                            <th></th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.site}
+                                onChange={(e) => handleColumnFilterChange('site', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.batiment}
+                                onChange={(e) => handleColumnFilterChange('batiment', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.etage}
+                                onChange={(e) => handleColumnFilterChange('etage', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.localisation}
+                                onChange={(e) => handleColumnFilterChange('localisation', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.numero}
+                                onChange={(e) => handleColumnFilterChange('numero', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <select 
+                                className="table-filter-select"
+                                value={columnFilters.type}
+                                onChange={(e) => handleColumnFilterChange('type', e.target.value)}
+                              >
+                                <option value="">Tous</option>
+                                <option value="monobloc">Monobloc</option>
+                                <option value="split">Split</option>
+                              </select>
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.puissance}
+                                onChange={(e) => handleColumnFilterChange('puissance', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <select 
+                                className="table-filter-select"
+                                value={columnFilters.type_contrat}
+                                onChange={(e) => handleColumnFilterChange('type_contrat', e.target.value)}
+                              >
+                                <option value="">Tous</option>
+                                <option value="achat">Achat</option>
+                                <option value="location">Location</option>
+                                <option value="personnel">Personnel</option>
+                              </select>
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.enregistre_par}
+                                onChange={(e) => handleColumnFilterChange('enregistre_par', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.date_pose}
+                                onChange={(e) => handleColumnFilterChange('date_pose', e.target.value)}
+                              />
+                            </th>
+                            <th>
+                              <input 
+                                type="text" 
+                                className="table-filter-input"
+                                placeholder="Filtrer..."
+                                value={columnFilters.observations}
+                                onChange={(e) => handleColumnFilterChange('observations', e.target.value)}
+                              />
+                            </th>
+                            {!isReadOnly && <th></th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -2234,6 +2480,189 @@ function App() {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+
+                    {/* Mobile filters & sorting bar */}
+                    <div className="mobile-only" style={{ marginBottom: '1rem' }}>
+                      <button 
+                        className="btn btn-secondary btn-full" 
+                        onClick={() => setShowMobileFilters(!showMobileFilters)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '600', padding: '0.6rem 1rem' }}
+                      >
+                        <span>⚙️ Filtres avancés & Tri</span>
+                        <span>{showMobileFilters ? '▲' : '▼'}</span>
+                      </button>
+
+                      {showMobileFilters && (
+                        <div className="card" style={{ padding: '1rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', border: '1px solid var(--border-light)', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)' }}>
+                          
+                          {/* Sort control */}
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>Trier par</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <select 
+                                className="input-control no-icon" 
+                                style={{ flex: 1, fontSize: '0.8rem', height: '36px', padding: '0 0.5rem' }}
+                                value={sortField}
+                                onChange={(e) => setSortField(e.target.value)}
+                              >
+                                <option value="site">Site</option>
+                                <option value="batiment">Bâtiment</option>
+                                <option value="etage">Niveau (Étage)</option>
+                                <option value="localisation">Localisation</option>
+                                <option value="numero">N° Climatiseur</option>
+                                <option value="type">Type</option>
+                                <option value="puissance">Puissance</option>
+                                <option value="type_contrat">Contrat</option>
+                                <option value="enregistre_par">Opérateur</option>
+                                <option value="date_pose">Date de pose</option>
+                                <option value="observations">Observations</option>
+                              </select>
+                              <select 
+                                className="input-control no-icon" 
+                                style={{ width: '90px', fontSize: '0.8rem', height: '36px', padding: '0 0.5rem' }}
+                                value={sortDirection}
+                                onChange={(e) => setSortDirection(e.target.value)}
+                              >
+                                <option value="asc">Croiss.</option>
+                                <option value="desc">Décroiss.</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <hr style={{ margin: '0.25rem 0', border: '0', borderTop: '1px solid var(--border-light)' }} />
+
+                          {/* Filters grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Site</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.site}
+                                onChange={(e) => handleColumnFilterChange('site', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Bâtiment</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.batiment}
+                                onChange={(e) => handleColumnFilterChange('batiment', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Niveau</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.etage}
+                                onChange={(e) => handleColumnFilterChange('etage', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Localisation</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.localisation}
+                                onChange={(e) => handleColumnFilterChange('localisation', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>N° Climatiseur</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.numero}
+                                onChange={(e) => handleColumnFilterChange('numero', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Type</label>
+                              <select 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem', padding: '0 0.5rem' }}
+                                value={columnFilters.type}
+                                onChange={(e) => handleColumnFilterChange('type', e.target.value)}
+                              >
+                                <option value="">Tous</option>
+                                <option value="monobloc">Monobloc</option>
+                                <option value="split">Split</option>
+                              </select>
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Puissance (W)</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.puissance}
+                                onChange={(e) => handleColumnFilterChange('puissance', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Contrat</label>
+                              <select 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem', padding: '0 0.5rem' }}
+                                value={columnFilters.type_contrat}
+                                onChange={(e) => handleColumnFilterChange('type_contrat', e.target.value)}
+                              >
+                                <option value="">Tous</option>
+                                <option value="achat">Achat</option>
+                                <option value="location">Location</option>
+                                <option value="personnel">Personnel</option>
+                              </select>
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Opérateur</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.enregistre_par}
+                                onChange={(e) => handleColumnFilterChange('enregistre_par', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Date de pose</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.date_pose}
+                                onChange={(e) => handleColumnFilterChange('date_pose', e.target.value)}
+                              />
+                            </div>
+                            <div className="form-group" style={{ gridColumn: '1 / -1', marginBottom: 0 }}>
+                              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.15rem' }}>Observations</label>
+                              <input 
+                                type="text" 
+                                className="input-control no-icon"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                placeholder="Filtrer..."
+                                value={columnFilters.observations}
+                                onChange={(e) => handleColumnFilterChange('observations', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Mobile cards layout */}

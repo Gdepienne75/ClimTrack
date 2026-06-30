@@ -73,7 +73,7 @@ body {
 .main-content {
   flex: 1;
   padding: 2rem;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
 }
@@ -89,12 +89,12 @@ body {
 
 /* --- Desktop Sidebar --- */
 .sidebar {
-  width: 280px;
+  width: 200px;
   background-color: var(--surface);
   border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  padding: 1.5rem;
+  padding: 1.25rem 0.85rem;
   flex-shrink: 0;
   box-shadow: var(--elevation-1);
 }
@@ -1274,4 +1274,31 @@ body {
 
 .login-header .brand-icon {
   margin: 0 auto 1rem auto;
+}
+
+/* --- Table column filtering inputs --- */
+.filter-inputs-row th {
+  background-color: var(--background) !important;
+  padding: 0.4rem 0.5rem !important;
+  border-bottom: 2px solid var(--border-light) !important;
+}
+
+.table-filter-input,
+.table-filter-select {
+  width: 100%;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  outline: none;
+  font-weight: normal;
+  transition: border-color var(--transition-fast);
+}
+
+.table-filter-input:focus,
+.table-filter-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
 }
