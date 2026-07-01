@@ -20,6 +20,7 @@ const IconMapPin = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="n
 const IconWind = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>;
 const IconDashboard = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>;
 const IconList = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
+const IconBox = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>;
 const IconMonobloc = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="6" y="3" width="12" height="17" rx="2" />
@@ -163,6 +164,30 @@ function App() {
   const [selectedDetailClim, setSelectedDetailClim] = useState(null);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
 
+  // Stock Management states
+  const [depots, setDepots] = useState([]);
+  const [selectedDepotId, setSelectedDepotId] = useState(null);
+  const [showDepotModal, setShowDepotModal] = useState(false);
+  const [editingDepot, setEditingDepot] = useState(null);
+  const [depotName, setDepotName] = useState('');
+  const [depotSites, setDepotSites] = useState([]);
+
+  const [showStockClimModal, setShowStockClimModal] = useState(false);
+  const [editingStockClim, setEditingStockClim] = useState(null);
+  const [stockClimNumber, setStockClimNumber] = useState('');
+  const [stockClimType, setStockClimType] = useState('monobloc');
+  const [stockClimPower, setStockClimPower] = useState('');
+  const [stockClimTypeContrat, setStockClimTypeContrat] = useState('achat');
+  const [stockClimObservations, setStockClimObservations] = useState('');
+  const [stockClimDate, setStockClimDate] = useState('');
+
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [installClim, setInstallClim] = useState(null);
+  const [installSite, setInstallSite] = useState('');
+  const [installBatiment, setInstallBatiment] = useState('');
+  const [installEtage, setInstallEtage] = useState('');
+  const [installLocalisation, setInstallLocalisation] = useState('');
+
   // Toast message
   const [toastMessage, setToastMessage] = useState('');
   const [supabaseError, setSupabaseError] = useState(null);
@@ -197,21 +222,21 @@ function App() {
       setSupabaseError(null);
 
       // 1. Fetch counts (efficiently without downloading all rows)
-      let totalQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true });
+      let totalQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true }).or('statut.eq.installe,statut.is.null');
       if (!isAllSitesAllowed) {
         totalQuery = totalQuery.in('site', allowedSites);
       }
       const { count: total, error: errTotal } = await totalQuery;
       if (errTotal) throw errTotal;
 
-      let monoQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true }).eq('type', 'monobloc');
+      let monoQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true }).eq('type', 'monobloc').or('statut.eq.installe,statut.is.null');
       if (!isAllSitesAllowed) {
         monoQuery = monoQuery.in('site', allowedSites);
       }
       const { count: monobloc, error: errMono } = await monoQuery;
       if (errMono) throw errMono;
 
-      let splitQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true }).eq('type', 'split');
+      let splitQuery = supabase.from('climatiseurs').select('*', { count: 'exact', head: true }).eq('type', 'split').or('statut.eq.installe,statut.is.null');
       if (!isAllSitesAllowed) {
         splitQuery = splitQuery.in('site', allowedSites);
       }
@@ -219,7 +244,7 @@ function App() {
       if (errSplit) throw errSplit;
 
       // Equipped rooms count (we download just the location fields of climatiseurs, which is tiny)
-      let locsQuery = supabase.from('climatiseurs').select('site,batiment,etage,localisation');
+      let locsQuery = supabase.from('climatiseurs').select('site,batiment,etage,localisation').or('statut.eq.installe,statut.is.null');
       if (!isAllSitesAllowed) {
         locsQuery = locsQuery.in('site', allowedSites);
       }
@@ -238,7 +263,7 @@ function App() {
       });
 
       // 2. Fetch the 5 most recent installations
-      let recentsQuery = supabase.from('climatiseurs').select('*').order('created_at', { ascending: false }).limit(5);
+      let recentsQuery = supabase.from('climatiseurs').select('*').or('statut.eq.installe,statut.is.null').order('created_at', { ascending: false }).limit(5);
       if (!isAllSitesAllowed) {
         recentsQuery = recentsQuery.in('site', allowedSites);
       }
@@ -246,7 +271,7 @@ function App() {
       if (errRecents) throw errRecents;
       setRecentClimatiseurs(recents || []);
 
-      // 3. Fetch all climatiseurs paginated (for inventory PDF report)
+      // 3. Fetch all climatiseurs paginated (for inventory PDF report & stock view)
       await loadAllClimatiseurs();
 
       // 4. Fetch unique sites from the view
@@ -272,6 +297,25 @@ function App() {
         }
       } else {
         setSites(sitesData.map(s => s.site));
+      }
+
+      // 5. Fetch depots
+      const { data: depotsData, error: errDepots } = await supabase.from('depots').select('*').order('nom');
+      if (errDepots) {
+        // Table depots might not exist yet, we will handle gracefully
+        console.warn("Table depots non trouvée, elle sera créée via migration SQL.", errDepots);
+      } else {
+        let filteredDepots = depotsData || [];
+        if (!isAllSitesAllowed) {
+          filteredDepots = filteredDepots.filter(d => 
+            d.sites_rattaches && d.sites_rattaches.some(site => allowedSites.includes(site))
+          );
+        }
+        setDepots(filteredDepots);
+        // Automatically select the first depot if none selected and depots exist
+        if (filteredDepots.length > 0) {
+          setSelectedDepotId(prev => prev || filteredDepots[0].id);
+        }
       }
 
     } catch (err) {
@@ -633,6 +677,7 @@ function App() {
   // Filter climatiseurs matching selected location
   const getClimsInSelectedLocation = () => {
     return climatiseurs.filter(c => 
+      c.statut !== 'stock' &&
       c.site === selectedSite &&
       c.batiment === selectedBuilding &&
       c.etage === selectedFloor &&
@@ -895,6 +940,299 @@ function App() {
     }
   };
 
+  // --- DEPOT ACTIONS ---
+  const handleSaveDepot = async (e) => {
+    e.preventDefault();
+    if (isReadOnly) {
+      triggerToast("Mode lecture seule. Impossible d'ajouter ou de modifier un dépôt.");
+      return;
+    }
+    if (!depotName.trim() || depotSites.length === 0) {
+      alert("Veuillez renseigner un nom et lier au moins un site.");
+      return;
+    }
+
+    try {
+      if (editingDepot) {
+        // Update
+        const { error } = await supabase
+          .from('depots')
+          .update({
+            nom: depotName.trim(),
+            sites_rattaches: depotSites
+          })
+          .eq('id', editingDepot.id);
+
+        if (error) throw error;
+        triggerToast("Dépôt mis à jour !");
+      } else {
+        // Insert
+        const { error } = await supabase
+          .from('depots')
+          .insert({
+            nom: depotName.trim(),
+            sites_rattaches: depotSites
+          });
+
+        if (error) throw error;
+        triggerToast("Dépôt créé !");
+      }
+
+      setShowDepotModal(false);
+      setEditingDepot(null);
+      setDepotName('');
+      setDepotSites([]);
+      await loadData();
+    } catch (err) {
+      console.error("Save depot error:", err);
+      alert("Erreur lors de la sauvegarde du dépôt. Vérifiez s'il n'existe pas déjà sous le même nom.");
+    }
+  };
+
+  const startEditDepot = (depot) => {
+    setEditingDepot(depot);
+    setDepotName(depot.nom);
+    setDepotSites(depot.sites_rattaches || []);
+    setShowDepotModal(true);
+  };
+
+  const handleDeleteDepot = async (id) => {
+    if (isReadOnly) return;
+    const depotClims = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === id);
+    if (depotClims.length > 0) {
+      alert(`Impossible de supprimer ce dépôt car il contient encore ${depotClims.length} climatiseur(s) en stock.`);
+      return;
+    }
+
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer ce dépôt ?")) {
+      try {
+        const { error } = await supabase
+          .from('depots')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+        triggerToast("Dépôt supprimé.");
+        setSelectedDepotId(prev => prev === id ? null : prev);
+        await loadData();
+      } catch (err) {
+        console.error("Delete depot error:", err);
+        alert("Erreur lors de la suppression du dépôt.");
+      }
+    }
+  };
+
+  // --- STOCK CLIMATISEUR ACTIONS ---
+  const handleSaveStockClim = async (e) => {
+    e.preventDefault();
+    if (isReadOnly) return;
+    if (!selectedDepotId) {
+      alert("Aucun dépôt sélectionné.");
+      return;
+    }
+    if (!stockClimNumber.trim() || !stockClimDate) {
+      alert("Le numéro de série et la date d'acquisition sont obligatoires.");
+      return;
+    }
+
+    try {
+      if (editingStockClim) {
+        // Update
+        const { error } = await supabase
+          .from('climatiseurs')
+          .update({
+            numero: stockClimNumber.trim(),
+            type: stockClimType,
+            puissance: stockClimPower ? parseInt(stockClimPower, 10) : null,
+            type_contrat: stockClimTypeContrat,
+            observations: stockClimObservations.trim() || null,
+            date_pose: stockClimDate,
+            enregistre_par: loggedInUser || 'admin'
+          })
+          .eq('id', editingStockClim.id);
+
+        if (error) throw error;
+        triggerToast("Fiche de stock mise à jour !");
+      } else {
+        // Insert
+        const exists = climatiseurs.some(c => c.numero.toLowerCase() === stockClimNumber.trim().toLowerCase());
+        if (exists) {
+          alert("Erreur : Ce numéro de climatiseur existe déjà dans la base.");
+          return;
+        }
+
+        const { error } = await supabase
+          .from('climatiseurs')
+          .insert({
+            numero: stockClimNumber.trim(),
+            type: stockClimType,
+            puissance: stockClimPower ? parseInt(stockClimPower, 10) : null,
+            type_contrat: stockClimTypeContrat,
+            observations: stockClimObservations.trim() || null,
+            date_pose: stockClimDate,
+            statut: 'stock',
+            depot_id: selectedDepotId,
+            site: '',
+            batiment: '',
+            etage: '',
+            localisation: '',
+            enregistre_par: loggedInUser || 'admin'
+          });
+
+        if (error) throw error;
+        triggerToast("Climatiseur ajouté au stock !");
+      }
+
+      setShowStockClimModal(false);
+      setEditingStockClim(null);
+      setStockClimNumber('');
+      setStockClimType('monobloc');
+      setStockClimPower('');
+      setStockClimTypeContrat('achat');
+      setStockClimObservations('');
+      setStockClimDate('');
+      await loadData();
+    } catch (err) {
+      console.error("Save stock clim error:", err);
+      alert("Erreur lors de l'enregistrement de l'appareil en stock.");
+    }
+  };
+
+  const startEditStockClim = (clim) => {
+    setEditingStockClim(clim);
+    setStockClimNumber(clim.numero);
+    setStockClimType(clim.type);
+    setStockClimPower(clim.puissance || '');
+    setStockClimTypeContrat(clim.type_contrat || 'achat');
+    setStockClimObservations(clim.observations || '');
+    setStockClimDate(clim.date_pose || '');
+    setShowStockClimModal(true);
+  };
+
+  const handleDeleteStockClim = async (id) => {
+    if (isReadOnly) return;
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer définitivement cet équipement du stock ?")) {
+      try {
+        const { error } = await supabase
+          .from('climatiseurs')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+        triggerToast("Équipement supprimé du stock.");
+        await loadData();
+      } catch (err) {
+        console.error("Delete stock clim error:", err);
+        alert("Erreur lors de la suppression.");
+      }
+    }
+  };
+
+  // --- INSTALLATION TRANSFER ACTION ---
+  const startInstallFlow = (clim) => {
+    setInstallClim(clim);
+    setInstallSite('');
+    setInstallBatiment('');
+    setInstallEtage('');
+    setInstallLocalisation('');
+    setShowInstallModal(true);
+  };
+
+  const handleConfirmInstall = async (e) => {
+    e.preventDefault();
+    if (isReadOnly) return;
+    if (!installSite || !installBatiment || !installEtage || !installLocalisation) {
+      alert("Veuillez renseigner tous les champs d'emplacement.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('climatiseurs')
+        .update({
+          statut: 'installe',
+          depot_id: null,
+          site: installSite,
+          batiment: installBatiment,
+          etage: installEtage,
+          localisation: installLocalisation,
+          date_pose: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', installClim.id);
+
+      if (error) throw error;
+
+      // Add to local database if not exists in locaux list
+      const localExists = locaux.some(l => 
+        l.site === installSite && 
+        l.batiment === installBatiment && 
+        l.etage === installEtage && 
+        l.localisation === installLocalisation
+      );
+      if (!localExists) {
+        await supabase.from('locaux').insert({
+          site: installSite,
+          batiment: installBatiment,
+          etage: installEtage,
+          localisation: installLocalisation
+        });
+      }
+
+      triggerToast("Climatiseur installé avec succès !");
+      setShowInstallModal(false);
+      setInstallClim(null);
+      await loadData();
+    } catch (err) {
+      console.error("Install flow error:", err);
+      alert("Erreur lors de l'installation physique.");
+    }
+  };
+
+  // --- UNINSTALL FLOW (RETURN TO STOCK) ---
+  const [showUninstallModal, setShowUninstallModal] = useState(false);
+  const [uninstallClim, setUninstallClim] = useState(null);
+  const [uninstallDepotId, setUninstallDepotId] = useState('');
+
+  const startUninstallFlow = (clim) => {
+    setUninstallClim(clim);
+    setUninstallDepotId(depots.length > 0 ? depots[0].id : '');
+    setShowUninstallModal(true);
+  };
+
+  const handleConfirmUninstall = async (e) => {
+    e.preventDefault();
+    if (isReadOnly) return;
+    if (!uninstallDepotId) {
+      alert("Veuillez choisir un dépôt de stockage.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('climatiseurs')
+        .update({
+          statut: 'stock',
+          depot_id: uninstallDepotId,
+          site: '',
+          batiment: '',
+          etage: '',
+          localisation: '',
+          date_pose: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', uninstallClim.id);
+
+      if (error) throw error;
+
+      triggerToast("Climatiseur désinstallé et renvoyé en stock.");
+      setShowUninstallModal(false);
+      setUninstallClim(null);
+      await loadData();
+    } catch (err) {
+      console.error("Uninstall flow error:", err);
+      alert("Erreur lors de la désinstallation.");
+    }
+  };
+
   // Toggle column sorting
   const handleSort = (field) => {
     if (sortField === field) {
@@ -940,7 +1278,7 @@ function App() {
 
   // Sort and filter list for reports
   const getSortedClimatiseurs = () => {
-    let list = [...climatiseurs];
+    let list = [...climatiseurs].filter(c => c.statut !== 'stock');
 
     // 1. Global Search Query
     if (searchQuery.trim()) {
@@ -1335,6 +1673,13 @@ function App() {
                 <IconList />
                 <span>Inventaire & Rapports</span>
               </div>
+              <div 
+                className={`nav-link ${currentTab === 'stock' ? 'active' : ''}`}
+                onClick={() => setCurrentTab('stock')}
+              >
+                <IconBox />
+                <span>Gestion des Stocks</span>
+              </div>
             </nav>
 
             <div className="sidebar-footer">
@@ -1392,6 +1737,15 @@ function App() {
                 <IconList />
               </span>
               <span>Inventaire</span>
+            </div>
+            <div 
+              className={`bottom-nav-item ${currentTab === 'stock' ? 'active' : ''}`}
+              onClick={() => setCurrentTab('stock')}
+            >
+              <span className="bottom-nav-icon">
+                <IconBox />
+              </span>
+              <span>Stocks</span>
             </div>
           </nav>
 
@@ -1999,6 +2353,13 @@ function App() {
                                     >
                                       <IconTrash /> Supprimer
                                     </button>
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+                                      onClick={() => startUninstallFlow(clim)}
+                                    >
+                                      📦 Stock
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -2551,6 +2912,14 @@ function App() {
                                      >
                                        <IconTrash />
                                      </button>
+                                     <button 
+                                       className="btn btn-secondary" 
+                                       style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
+                                       onClick={() => startUninstallFlow(clim)}
+                                       title="Désinstaller (Renvoyer en stock)"
+                                     >
+                                       📦
+                                     </button>
                                    </div>
                                  </td>
                                )}
@@ -2639,6 +3008,13 @@ function App() {
                                 >
                                   <IconTrash /> Supprimer
                                 </button>
+                                <button 
+                                  className="btn btn-secondary btn-sm" 
+                                  style={{ flex: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.2rem' }}
+                                  onClick={() => startUninstallFlow(clim)}
+                                >
+                                  📦 Stock
+                                </button>
                               </div>
                             )}
                           </div>
@@ -2657,6 +3033,270 @@ function App() {
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {currentTab === 'stock' && (
+              <div>
+                <h1 className="dashboard-title">Gestion des Stocks</h1>
+                <p className="dashboard-subtitle">Gérez vos climatiseurs en stock et affectez-les aux locaux.</p>
+
+                <div className="stock-layout" style={{ marginTop: '1.5rem' }}>
+                  {/* Left Column: Depots List */}
+                  <div className="stock-depots-sidebar">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', width: '100%' }}>
+                      <h2 style={{ fontSize: '1.1rem', fontWeight: '600' }}>Dépôts</h2>
+                      {!isReadOnly && (
+                        <button 
+                          className="btn btn-primary btn-sm" 
+                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', marginLeft: 'auto' }}
+                          onClick={() => {
+                            setEditingDepot(null);
+                            setDepotName('');
+                            setDepotSites([]);
+                            setShowDepotModal(true);
+                          }}
+                        >
+                          ➕ Nouveau
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {depots.length === 0 ? (
+                        <div style={{ padding: '1.5rem', textAlign: 'center', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-light)', color: 'var(--text-muted)' }}>
+                          Aucun dépôt configuré.
+                        </div>
+                      ) : (
+                        depots.map(depot => {
+                          const stockCount = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === depot.id).length;
+                          const isSelected = selectedDepotId === depot.id;
+                          return (
+                            <div 
+                              key={depot.id}
+                              className="card"
+                              style={{ 
+                                cursor: 'pointer', 
+                                padding: '1rem', 
+                                border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-light)',
+                                backgroundColor: isSelected ? 'rgba(103, 80, 164, 0.03)' : 'var(--surface)',
+                                boxShadow: isSelected ? 'var(--elevation-2)' : 'none',
+                                position: 'relative'
+                              }}
+                              onClick={() => setSelectedDepotId(depot.id)}
+                            >
+                              <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.25rem', paddingRight: '3rem' }}>
+                                📦 {depot.nom}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                                {depot.sites_rattaches?.map(s => (
+                                  <span key={s} style={{ backgroundColor: 'var(--secondary-container)', color: 'var(--on-secondary-container)', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '0.7rem' }}>
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--primary)' }}>
+                                {stockCount} climatiseur{stockCount > 1 ? 's' : ''} en stock
+                              </div>
+
+                              {/* Depot Admin Actions */}
+                              {!isReadOnly && (
+                                <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', display: 'flex', gap: '0.25rem' }}>
+                                  <button 
+                                    className="btn btn-secondary" 
+                                    style={{ width: '24px', height: '24px', padding: 0, fontSize: '0.7rem', borderRadius: 'var(--radius-xs)' }}
+                                    onClick={(e) => { e.stopPropagation(); startEditDepot(depot); }}
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
+                                    className="btn btn-danger" 
+                                    style={{ width: '24px', height: '24px', padding: 0, fontSize: '0.7rem', borderRadius: 'var(--radius-xs)' }}
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteDepot(depot.id); }}
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Stock Grid / Table */}
+                  <div className="stock-content-panel">
+                    {!selectedDepotId ? (
+                      <div className="empty-state" style={{ height: '300px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <div className="empty-icon"><IconInfo /></div>
+                        <div className="empty-title">Sélectionnez un dépôt</div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                          Veuillez choisir un dépôt de stockage dans la liste de gauche pour en consulter l'inventaire.
+                        </p>
+                      </div>
+                    ) : (
+                      (() => {
+                        const currentDepot = depots.find(d => d.id === selectedDepotId);
+                        const stockClims = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === selectedDepotId);
+                        return (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                              <h2 style={{ fontSize: '1.2rem', fontWeight: '600' }}>
+                                📦 Stock de : {currentDepot ? currentDepot.nom : 'Dépôt'}
+                              </h2>
+                              {!isReadOnly && (
+                                <button 
+                                  className="btn btn-primary" 
+                                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', marginLeft: 'auto' }}
+                                  onClick={() => {
+                                    setEditingStockClim(null);
+                                    setStockClimNumber('');
+                                    setStockClimType('monobloc');
+                                    setStockClimPower('');
+                                    setStockClimTypeContrat('achat');
+                                    setStockClimObservations('');
+                                    setStockClimDate(new Date().toISOString().split('T')[0]);
+                                    setShowStockClimModal(true);
+                                  }}
+                                >
+                                  ➕ Ajouter au Stock
+                                </button>
+                              )}
+                            </div>
+
+                            {stockClims.length === 0 ? (
+                              <div className="empty-state" style={{ height: '240px' }}>
+                                <div className="empty-icon">💨</div>
+                                <div className="empty-title">Aucun climatiseur en stock</div>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                  Ce dépôt est actuellement vide. Ajoutez de nouveaux climatiseurs au stock.
+                                </p>
+                              </div>
+                            ) : (
+                              <>
+                                {/* Table on desktop */}
+                                <div className="desktop-only table-responsive" style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                                  <table className="table">
+                                    <thead>
+                                      <tr>
+                                        <th>N° Climatiseur</th>
+                                        <th>Type</th>
+                                        <th>Puissance</th>
+                                        <th>Contrat</th>
+                                        <th>Acquisition</th>
+                                        <th>Observations</th>
+                                        {!isReadOnly && <th style={{ width: '160px', textAlign: 'center' }}>Actions</th>}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {stockClims.map(clim => (
+                                        <tr key={clim.id} className="clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
+                                          if (e.target.closest('button')) return;
+                                          setSelectedDetailClim(clim);
+                                        }}>
+                                          <td className="text-highlight">{clim.numero}</td>
+                                          <td>
+                                            <span className={`fiche-badge ${clim.type}`}>
+                                              {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                            </span>
+                                          </td>
+                                          <td>{clim.puissance ? `${clim.puissance} W` : '-'}</td>
+                                          <td style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</td>
+                                          <td>{formatDateFR(clim.date_pose)}</td>
+                                          <td style={{ fontStyle: 'italic', color: 'var(--text-secondary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {clim.observations || '-'}
+                                          </td>
+                                          {!isReadOnly && (
+                                            <td>
+                                              <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                                                <button 
+                                                  className="btn btn-secondary btn-sm" 
+                                                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                                                  onClick={() => startEditStockClim(clim)}
+                                                >
+                                                  ✏️
+                                                </button>
+                                                <button 
+                                                  className="btn btn-danger btn-sm" 
+                                                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                                                  onClick={() => handleDeleteStockClim(clim.id)}
+                                                >
+                                                  🗑️
+                                                </button>
+                                                <button 
+                                                  className="btn btn-primary btn-sm" 
+                                                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                                                  onClick={() => startInstallFlow(clim)}
+                                                >
+                                                  🔧 Installer
+                                                </button>
+                                              </div>
+                                            </td>
+                                          )}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+
+                                {/* Cards on mobile */}
+                                <div className="mobile-only report-cards-grid">
+                                  {stockClims.map(clim => (
+                                    <div key={clim.id} className="report-card clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
+                                      if (e.target.closest('.report-card-footer') || e.target.closest('button')) return;
+                                      setSelectedDetailClim(clim);
+                                    }}>
+                                      <div className="report-card-content">
+                                        <div className="report-card-header">
+                                          <span className="report-card-num">N° {clim.numero}</span>
+                                          <span className={`fiche-badge ${clim.type}`}>
+                                            {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                          </span>
+                                        </div>
+                                        <div className="report-card-body">
+                                          <div className="report-card-row">
+                                            <span className="report-card-label">⚡ Puissance</span>
+                                            <span className="report-card-value">{clim.puissance ? `${clim.puissance} W` : '-'}</span>
+                                          </div>
+                                          <div className="report-card-row">
+                                            <span className="report-card-label">🔑 Contrat</span>
+                                            <span className="report-card-value" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</span>
+                                          </div>
+                                          <div className="report-card-row">
+                                            <span className="report-card-label">📅 Acquisition</span>
+                                            <span className="report-card-value">{formatDateFR(clim.date_pose)}</span>
+                                          </div>
+                                          <div className="report-card-row">
+                                            <span className="report-card-label">📝 Observations</span>
+                                            <span className="report-card-value" style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>{clim.observations || '-'}</span>
+                                          </div>
+                                        </div>
+                                        {!isReadOnly && (
+                                          <div className="report-card-footer" style={{ gap: '0.25rem' }}>
+                                            <button className="btn btn-secondary btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => startEditStockClim(clim)}>
+                                              ✏️
+                                            </button>
+                                            <button className="btn btn-danger btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => handleDeleteStockClim(clim.id)}>
+                                              🗑️
+                                            </button>
+                                            <button className="btn btn-primary btn-sm" style={{ flex: 2, padding: '0.25rem', fontSize: '0.75rem' }} onClick={() => startInstallFlow(clim)}>
+                                              🔧 Installer
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        );
+                      })()
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </main>
@@ -2936,6 +3576,287 @@ function App() {
                     Fermer
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- DEPOT MANAGEMENT MODAL --- */}
+          {showDepotModal && (
+            <div className="modal-backdrop" onClick={() => setShowDepotModal(false)}>
+              <div className="modal" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2 className="modal-title">
+                    {editingDepot ? '✏️ Modifier le dépôt' : '➕ Nouveau dépôt de stockage'}
+                  </h2>
+                  <button className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} onClick={() => setShowDepotModal(false)}>✕</button>
+                </div>
+                <form onSubmit={handleSaveDepot}>
+                  <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label htmlFor="depot-name">Nom du dépôt *</label>
+                      <input 
+                        type="text" 
+                        id="depot-name"
+                        className="input-control no-icon"
+                        value={depotName} 
+                        onChange={(e) => setDepotName(e.target.value)} 
+                        placeholder="Ex: Dépôt Principal Nord"
+                        required 
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Sites rattachés (lier à un ou plusieurs sites) *</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '160px', overflowY: 'auto', border: '1px solid var(--border-light)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--background)' }}>
+                        {sites.length === 0 ? (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Aucun site enregistré dans l'arborescence.</span>
+                        ) : (
+                          sites.map(siteName => {
+                            const isChecked = depotSites.includes(siteName);
+                            return (
+                              <label key={siteName} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setDepotSites(prev => 
+                                      prev.includes(siteName) 
+                                        ? prev.filter(s => s !== siteName) 
+                                        : [...prev, siteName]
+                                    );
+                                  }}
+                                />
+                                <span>{siteName}</span>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button type="submit" className="btn btn-primary">Sauvegarder</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowDepotModal(false)}>Annuler</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* --- ADD/EDIT STOCK CLIMATISEUR MODAL --- */}
+          {showStockClimModal && (
+            <div className="modal-backdrop" onClick={() => setShowStockClimModal(false)}>
+              <div className="modal" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2 className="modal-title">
+                    {editingStockClim ? "✏️ Modifier la fiche de stock" : "➕ Ajouter un climatiseur au stock"}
+                  </h2>
+                  <button className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} onClick={() => setShowStockClimModal(false)}>✕</button>
+                </div>
+                <form onSubmit={handleSaveStockClim}>
+                  <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label htmlFor="stock-num">Numéro du climatiseur / N° Série *</label>
+                      <input 
+                        type="text" 
+                        id="stock-num"
+                        className="input-control no-icon"
+                        value={stockClimNumber} 
+                        onChange={(e) => setStockClimNumber(e.target.value)} 
+                        placeholder="Ex: SN-5489-A"
+                        required 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="stock-type">Type de climatiseur</label>
+                      <select 
+                        id="stock-type"
+                        className="input-control no-icon"
+                        value={stockClimType}
+                        onChange={(e) => setStockClimType(e.target.value)}
+                      >
+                        <option value="monobloc">Monobloc</option>
+                        <option value="split">Split</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="stock-power">Puissance (Watts)</label>
+                      <input 
+                        type="number" 
+                        id="stock-power"
+                        className="input-control no-icon"
+                        value={stockClimPower}
+                        onChange={(e) => setStockClimPower(e.target.value)}
+                        placeholder="Ex: 3500"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="stock-contract">Type de contrat</label>
+                      <select 
+                        id="stock-contract"
+                        className="input-control no-icon"
+                        value={stockClimTypeContrat}
+                        onChange={(e) => setStockClimTypeContrat(e.target.value)}
+                      >
+                        <option value="achat">Achat</option>
+                        <option value="location">Location</option>
+                        <option value="personnel">Personnel</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="stock-date">Date d'acquisition *</label>
+                      <input 
+                        type="date" 
+                        id="stock-date"
+                        className="input-control no-icon"
+                        value={stockClimDate}
+                        onChange={(e) => setStockClimDate(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="stock-obs">Observations</label>
+                      <input 
+                        type="text" 
+                        id="stock-obs"
+                        className="input-control no-icon"
+                        value={stockClimObservations}
+                        onChange={(e) => setStockClimObservations(e.target.value)}
+                        placeholder="Ex: Cartons scellés, neuf"
+                      />
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button type="submit" className="btn btn-primary">Sauvegarder</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowStockClimModal(false)}>Annuler</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* --- PHYSICAL INSTALLATION MODAL (TRANSFER) --- */}
+          {showInstallModal && (
+            <div className="modal-backdrop" onClick={() => setShowInstallModal(false)}>
+              <div className="modal" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2 className="modal-title">🔧 Installer l'appareil : N° {installClim?.numero}</h2>
+                  <button className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} onClick={() => setShowInstallModal(false)}>✕</button>
+                </div>
+                <form onSubmit={handleConfirmInstall}>
+                  <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ background: 'rgba(103, 80, 164, 0.05)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', border: '1px solid var(--border-light)' }}>
+                      Affectez l'équipement en renseignant son emplacement physique exact.
+                    </div>
+                    
+                    <div className="form-group">
+                      <label htmlFor="inst-site">Site *</label>
+                      <input 
+                        type="text" 
+                        id="inst-site"
+                        className="input-control no-icon"
+                        value={installSite} 
+                        onChange={(e) => setInstallSite(e.target.value)} 
+                        placeholder="Ex: Site Principal (Paris)"
+                        list="sites-list"
+                        required 
+                      />
+                      <datalist id="sites-list">
+                        {sites.map(s => <option key={s} value={s} />)}
+                      </datalist>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="inst-bat">Bâtiment *</label>
+                      <input 
+                        type="text" 
+                        id="inst-bat"
+                        className="input-control no-icon"
+                        value={installBatiment} 
+                        onChange={(e) => setInstallBatiment(e.target.value)} 
+                        placeholder="Ex: Bâtiment A - Administration"
+                        required 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="inst-floor">Niveau / Étage *</label>
+                      <input 
+                        type="text" 
+                        id="inst-floor"
+                        className="input-control no-icon"
+                        value={installEtage} 
+                        onChange={(e) => setInstallEtage(e.target.value)} 
+                        placeholder="Ex: RDC, Étage 1"
+                        required 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="inst-loc">Localisation / Pièce *</label>
+                      <input 
+                        type="text" 
+                        id="inst-loc"
+                        className="input-control no-icon"
+                        value={installLocalisation} 
+                        onChange={(e) => setInstallLocalisation(e.target.value)} 
+                        placeholder="Ex: Bureau 101, Accueil"
+                        required 
+                      />
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button type="submit" className="btn btn-primary">Confirmer l'installation</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowInstallModal(false)}>Annuler</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* --- UNINSTALLATION MODAL (RETURN TO STOCK) --- */}
+          {showUninstallModal && (
+            <div className="modal-backdrop" onClick={() => setShowUninstallModal(false)}>
+              <div className="modal" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2 className="modal-title">📦 Désinstaller & Renvoyer en stock</h2>
+                  <button className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} onClick={() => setShowUninstallModal(false)}>✕</button>
+                </div>
+                <form onSubmit={handleConfirmUninstall}>
+                  <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ background: 'rgba(220, 76, 100, 0.05)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', border: '1px solid var(--danger-container)' }}>
+                      Vous allez désinstaller l'appareil <strong>N° {uninstallClim?.numero}</strong> (actuellement situé à {uninstallClim?.site} • {uninstallClim?.batiment}).
+                    </div>
+                    
+                    <div className="form-group">
+                      <label htmlFor="uninst-depot">Dépôt cible pour le stockage *</label>
+                      <select 
+                        id="uninst-depot"
+                        className="input-control no-icon"
+                        value={uninstallDepotId}
+                        onChange={(e) => setUninstallDepotId(e.target.value)}
+                        required
+                      >
+                        {depots.length === 0 ? (
+                          <option value="">Aucun dépôt disponible</option>
+                        ) : (
+                          depots.map(d => (
+                            <option key={d.id} value={d.id}>{d.nom}</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button type="submit" className="btn btn-danger">Renvoyer en stock</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowUninstallModal(false)}>Annuler</button>
+                  </div>
+                </form>
               </div>
             </div>
           )}
