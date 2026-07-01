@@ -361,7 +361,7 @@ function App() {
         let query = supabase.from('climatiseurs').select('*').range(page * pageSize, (page + 1) * pageSize - 1);
         if (!isAllSitesAllowed) {
           const sitesFilter = allowedSites.map(s => `"${s.replace(/"/g, '\\"')}"`).join(',');
-          query = query.or(`site.in.(${sitesFilter}),statut.eq.stock`);
+          query = query.or(`site.in.(${sitesFilter}),statut.eq.stock,statut.eq.reserve`);
         }
         const { data, error } = await query;
 
@@ -705,6 +705,7 @@ function App() {
   const getClimsInSelectedLocation = () => {
     return climatiseurs.filter(c => 
       c.statut !== 'stock' &&
+      c.statut !== 'reserve' &&
       c.site === selectedSite &&
       c.batiment === selectedBuilding &&
       c.etage === selectedFloor &&
@@ -1057,7 +1058,7 @@ function App() {
 
   const getStockStats = () => {
     const visibleDepotIds = depots.map(d => d.id);
-    const stockList = climatiseurs.filter(c => c.statut === 'stock' && visibleDepotIds.includes(c.depot_id));
+    const stockList = climatiseurs.filter(c => (c.statut === 'stock' || c.statut === 'reserve') && visibleDepotIds.includes(c.depot_id));
     const monobloc = stockList.filter(c => c.type === 'monobloc').length;
     const split = stockList.filter(c => c.type === 'split').length;
     return { monobloc, split };
@@ -1065,7 +1066,7 @@ function App() {
 
   const getFilteredAndSortedStock = () => {
     const visibleDepotIds = depots.map(d => d.id);
-    let list = climatiseurs.filter(c => c.statut === 'stock' && visibleDepotIds.includes(c.depot_id));
+    let list = climatiseurs.filter(c => (c.statut === 'stock' || c.statut === 'reserve') && visibleDepotIds.includes(c.depot_id));
     
     // Filter by depot
     if (filterStockDepot !== 'all') {
@@ -1180,7 +1181,7 @@ function App() {
 
   const handleDeleteDepot = async (id) => {
     if (isReadOnly) return;
-    const depotClims = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === id);
+    const depotClims = climatiseurs.filter(c => (c.statut === 'stock' || c.statut === 'reserve') && c.depot_id === id);
     if (depotClims.length > 0) {
       alert(`Impossible de supprimer ce dépôt car il contient encore ${depotClims.length} climatiseur(s) en stock.`);
       return;
@@ -1310,6 +1311,29 @@ function App() {
     }
   };
 
+  const handleToggleReservation = async (clim) => {
+    if (isReadOnly) return;
+    const newStatut = clim.statut === 'reserve' ? 'stock' : 'reserve';
+    try {
+      const { error } = await supabase
+        .from('climatiseurs')
+        .update({ statut: newStatut })
+        .eq('id', clim.id);
+
+      if (error) throw error;
+      
+      triggerToast(
+        newStatut === 'reserve' 
+          ? `🔒 Climatiseur N° ${clim.numero} mis en réservation.` 
+          : `🔓 Climatiseur N° ${clim.numero} libéré de sa réservation.`
+      );
+      await loadData();
+    } catch (err) {
+      console.error("Error toggling reservation:", err);
+      alert("Erreur lors de la modification du statut de réservation.");
+    }
+  };
+
   // --- INSTALLATION TRANSFER ACTION ---
   const startInstallFlow = (clim) => {
     setInstallingFromStockClim(clim);
@@ -1410,7 +1434,7 @@ function App() {
 
   // Sort and filter list for reports
   const getSortedClimatiseurs = () => {
-    let list = [...climatiseurs].filter(c => c.statut !== 'stock');
+    let list = [...climatiseurs].filter(c => c.statut !== 'stock' && c.statut !== 'reserve');
 
     // 1. Global Search Query
     if (searchQuery.trim()) {
@@ -3460,7 +3484,7 @@ function App() {
                                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('observations')}>
                                   Observations {renderStockSortIcon('observations')}
                                 </th>
-                                {!isReadOnly && <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>}
+                                {!isReadOnly && <th style={{ width: '150px', textAlign: 'center' }}>Actions</th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -3492,9 +3516,20 @@ function App() {
                                     </td>
                                     <td data-label="N° Climatiseur" className="text-highlight">{clim.numero}</td>
                                     <td data-label="Type">
-                                      <span className={`fiche-badge ${clim.type}`}>
-                                        {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
-                                      </span>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
+                                        <span className={`fiche-badge ${clim.type}`}>
+                                          {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                        </span>
+                                        {clim.statut === 'reserve' ? (
+                                          <span className="fiche-badge" style={{ backgroundColor: '#ffedd5', color: '#ea580c', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                            🔒 Réservé
+                                          </span>
+                                        ) : (
+                                          <span className="fiche-badge" style={{ backgroundColor: '#dcfce7', color: '#16a34a', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                            ✅ Disponible
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
                                     <td data-label="Puissance">{clim.puissance ? `${clim.puissance} W` : '-'}</td>
                                     <td data-label="Contrat" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</td>
@@ -3517,6 +3552,14 @@ function App() {
                                             title="Modifier la fiche"
                                           >
                                             ✏️
+                                          </button>
+                                          <button 
+                                            className="btn btn-secondary" 
+                                            style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
+                                            onClick={() => handleToggleReservation(clim)}
+                                            title={clim.statut === 'reserve' ? "Libérer la réservation" : "Réserver l'appareil"}
+                                          >
+                                            {clim.statut === 'reserve' ? '🔓' : '🔒'}
                                           </button>
                                           <button 
                                             className="btn btn-danger" 
@@ -3554,11 +3597,22 @@ function App() {
                                 setSelectedDetailClim(clim);
                               }}>
                                 <div className="report-card-content">
-                                  <div className="report-card-header">
+                                  <div className="report-card-header" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                                     <span className="report-card-num">N° {clim.numero}</span>
-                                    <span className={`fiche-badge ${clim.type}`}>
-                                      {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
-                                    </span>
+                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                      <span className={`fiche-badge ${clim.type}`}>
+                                        {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                      </span>
+                                      {clim.statut === 'reserve' ? (
+                                        <span className="fiche-badge" style={{ backgroundColor: '#ffedd5', color: '#ea580c', fontSize: '0.7rem' }}>
+                                          🔒 Réservé
+                                        </span>
+                                      ) : (
+                                        <span className="fiche-badge" style={{ backgroundColor: '#dcfce7', color: '#16a34a', fontSize: '0.7rem' }}>
+                                          ✅ Disponible
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="report-card-body">
                                     <div className="report-card-row">
@@ -3584,10 +3638,13 @@ function App() {
                                   </div>
                                   {!isReadOnly && (
                                     <div className="report-card-footer" style={{ gap: '0.25rem' }}>
-                                      <button className="btn btn-secondary btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => startEditStockClim(clim)}>
+                                      <button className="btn btn-secondary btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => startEditStockClim(clim)} title="Modifier">
                                         ✏️
                                       </button>
-                                      <button className="btn btn-danger btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => handleDeleteStockClim(clim.id)}>
+                                      <button className="btn btn-secondary btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => handleToggleReservation(clim)} title={clim.statut === 'reserve' ? "Libérer" : "Réserver"}>
+                                        {clim.statut === 'reserve' ? '🔓' : '🔒'}
+                                      </button>
+                                      <button className="btn btn-danger btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => handleDeleteStockClim(clim.id)} title="Supprimer">
                                         🗑️
                                       </button>
                                       <button className="btn btn-primary btn-sm" style={{ flex: 2, padding: '0.25rem', fontSize: '0.75rem' }} onClick={() => startInstallFlow(clim)}>
