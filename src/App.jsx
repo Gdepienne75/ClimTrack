@@ -183,6 +183,7 @@ function App() {
   const [stockClimDate, setStockClimDate] = useState('');
   const [stockSearchQuery, setStockSearchQuery] = useState('');
   const [showManageDepotsModal, setShowManageDepotsModal] = useState(false);
+  const [installingFromStockClim, setInstallingFromStockClim] = useState(null);
   const [stockSortField, setStockSortField] = useState('numero');
   const [stockSortAsc, setStockSortAsc] = useState(true);
   const [filterStockDepot, setFilterStockDepot] = useState('all');
@@ -682,6 +683,10 @@ function App() {
     setTreeSearchQuery('');
     setShowEntryModal(false);
     clearForm();
+    if (installingFromStockClim) {
+      setInstallingFromStockClim(null);
+      setCurrentTab('stock');
+    }
   };
 
   const clearForm = () => {
@@ -909,6 +914,10 @@ function App() {
       await loadData();
       clearForm();
       setShowAddFormOverride(false);
+      if (installingFromStockClim) {
+        setInstallingFromStockClim(null);
+        setCurrentTab('stock');
+      }
     } catch (err) {
       console.error("Migration insert/update error:", err);
       alert("Erreur lors de l'enregistrement. Vérifiez que le numéro de série n'existe pas déjà.");
@@ -1298,72 +1307,12 @@ function App() {
 
   // --- INSTALLATION TRANSFER ACTION ---
   const startInstallFlow = (clim) => {
-    setInstallClim(clim);
-    setInstallSite('');
-    setInstallBatiment('');
-    setInstallEtage('');
-    setInstallLocalisation('');
-    setInstallCustomSite('');
-    setInstallCustomBatiment('');
-    setInstallCustomEtage('');
-    setInstallCustomLocalisation('');
-    setShowInstallModal(true);
-  };
-
-  const handleConfirmInstall = async (e) => {
-    e.preventDefault();
-    if (isReadOnly) return;
-
-    const finalSite = installSite === '__new__' ? installCustomSite.trim() : installSite;
-    const finalBatiment = installBatiment === '__new__' ? installCustomBatiment.trim() : installBatiment;
-    const finalEtage = installEtage === '__new__' ? installCustomEtage.trim() : installEtage;
-    const finalLocalisation = installLocalisation === '__new__' ? installCustomLocalisation.trim() : installLocalisation;
-
-    if (!finalSite || !finalBatiment || !finalEtage || !finalLocalisation) {
-      alert("Veuillez renseigner tous les champs d'emplacement.");
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('climatiseurs')
-        .update({
-          statut: 'installe',
-          depot_id: null,
-          site: finalSite,
-          batiment: finalBatiment,
-          etage: finalEtage,
-          localisation: finalLocalisation,
-          date_pose: new Date().toISOString().split('T')[0]
-        })
-        .eq('id', installClim.id);
-
-      if (error) throw error;
-
-      // Add to local database if not exists in locaux list
-      const localExists = locaux.some(l => 
-        l.site === finalSite && 
-        l.batiment === finalBatiment && 
-        l.etage === finalEtage && 
-        l.localisation === finalLocalisation
-      );
-      if (!localExists) {
-        await supabase.from('locaux').insert({
-          site: finalSite,
-          batiment: finalBatiment,
-          etage: finalEtage,
-          localisation: finalLocalisation
-        });
-      }
-
-      triggerToast("Climatiseur installé avec succès !");
-      setShowInstallModal(false);
-      setInstallClim(null);
-      await loadData();
-    } catch (err) {
-      console.error("Install flow error:", err);
-      alert("Erreur lors de l'installation physique.");
-    }
+    setInstallingFromStockClim(clim);
+    setCurrentTab('add');
+    setCurrentStep(0);
+    setTreeSearchQuery('');
+    setSearchResults(null);
+    triggerToast(`Sélectionnez le local de destination pour l'appareil N° ${clim.numero}`);
   };
 
   // --- UNINSTALL FLOW (RETURN TO STOCK) ---
@@ -2081,6 +2030,37 @@ function App() {
             {/* 2. RECENSER / SEARCH STEP FLOW VIEW */}
             {currentTab === 'add' && (
               <div className="tree-container">
+                {installingFromStockClim && (
+                  <div style={{ 
+                    background: 'var(--primary-container)', 
+                    color: 'var(--on-primary-container)', 
+                    padding: '0.75rem 1rem', 
+                    borderRadius: 'var(--radius-md)', 
+                    marginBottom: '1.25rem', 
+                    border: '1px solid var(--primary)', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    gap: '1rem'
+                  }}>
+                    <div>
+                      <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', margin: 0 }}>🔧 Installation physique depuis le Stock en cours</h3>
+                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', opacity: 0.9 }}>
+                        Sélectionnez le local de destination pour l'appareil <strong>N° {installingFromStockClim.numero}</strong> dans la hiérarchie ci-dessous.
+                      </p>
+                    </div>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      style={{ whiteSpace: 'nowrap' }} 
+                      onClick={() => {
+                        setInstallingFromStockClim(null);
+                        setCurrentTab('stock');
+                      }}
+                    >
+                      Annuler l'installation
+                    </button>
+                  </div>
+                )}
                 {currentStep < 4 ? (
                   <>
                     <h2 className="mb-md" style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
@@ -2126,7 +2106,20 @@ function App() {
                                     setSelectedFloor(res.etage);
                                     setSelectedLocation(res.localisation);
                                     clearForm();
-                                    setShowEntryModal(true);
+                                    if (installingFromStockClim) {
+                                      setClimNumber(installingFromStockClim.numero);
+                                      setClimType(installingFromStockClim.type || 'monobloc');
+                                      setClimPower(installingFromStockClim.puissance ? String(installingFromStockClim.puissance) : '');
+                                      setClimDate(new Date().toISOString().split('T')[0]);
+                                      setClimTypeContrat(installingFromStockClim.type_contrat || 'achat');
+                                      setClimObservations(installingFromStockClim.observations || '');
+                                      setClimPhoto(installingFromStockClim.photo_url || null);
+                                      setSelectedStockIdToLink(installingFromStockClim.id);
+                                      setCurrentStep(4);
+                                      setShowAddFormOverride(true);
+                                    } else {
+                                      setShowEntryModal(true);
+                                    }
                                   }}
                                 >
                                   <span className="tree-node-label" style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
@@ -2289,7 +2282,20 @@ function App() {
                                                                     setSelectedFloor(floor);
                                                                     setSelectedLocation(loc);
                                                                     clearForm();
-                                                                    setShowEntryModal(true);
+                                                                    if (installingFromStockClim) {
+                                                                      setClimNumber(installingFromStockClim.numero);
+                                                                      setClimType(installingFromStockClim.type || 'monobloc');
+                                                                      setClimPower(installingFromStockClim.puissance ? String(installingFromStockClim.puissance) : '');
+                                                                      setClimDate(new Date().toISOString().split('T')[0]);
+                                                                      setClimTypeContrat(installingFromStockClim.type_contrat || 'achat');
+                                                                      setClimObservations(installingFromStockClim.observations || '');
+                                                                      setClimPhoto(installingFromStockClim.photo_url || null);
+                                                                      setSelectedStockIdToLink(installingFromStockClim.id);
+                                                                      setCurrentStep(4);
+                                                                      setShowAddFormOverride(true);
+                                                                    } else {
+                                                                      setShowEntryModal(true);
+                                                                    }
                                                                   }}
                                                                 >
                                                                   <span className="tree-node-label localisation">
