@@ -1440,3 +1440,20 @@ body {
     flex: 1 1 auto;
   }
 }
+
+/* --- Depot list hover interactions --- */
+.depot-item-row {
+  position: relative;
+}
+.depot-item-row:hover {
+  background-color: var(--surface-variant) !important;
+}
+.depot-actions-hover {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast) ease-in-out;
+}
+.depot-item-row:hover .depot-actions-hover {
+  opacity: 1;
+  pointer-events: auto;
+}

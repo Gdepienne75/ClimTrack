@@ -180,6 +180,7 @@ function App() {
   const [stockClimTypeContrat, setStockClimTypeContrat] = useState('achat');
   const [stockClimObservations, setStockClimObservations] = useState('');
   const [stockClimDate, setStockClimDate] = useState('');
+  const [stockSearchQuery, setStockSearchQuery] = useState('');
 
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [installClim, setInstallClim] = useState(null);
@@ -3039,14 +3040,66 @@ function App() {
 
             {currentTab === 'stock' && (
               <div>
-                <h1 className="dashboard-title">Gestion des Stocks</h1>
-                <p className="dashboard-subtitle">Gérez vos climatiseurs en stock et affectez-les aux locaux.</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <h1 className="dashboard-title" style={{ margin: 0 }}>Gestion des Stocks</h1>
+                    <p className="dashboard-subtitle" style={{ margin: 0 }}>Gérez vos climatiseurs en stock et affectez-les aux locaux.</p>
+                  </div>
+                </div>
+
+                {/* Stock KPIs */}
+                {(() => {
+                  const stockStats = getStockStats();
+                  return (
+                    <div className="metrics-grid" style={{ marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                      <div className="metric-card">
+                        <div className="metric-icon" style={{ backgroundColor: 'rgba(103, 80, 164, 0.1)', color: 'var(--primary)' }}>
+                          📦
+                        </div>
+                        <div className="metric-info">
+                          <span className="metric-label">Total en Stock</span>
+                          <h3 className="metric-value">{stockStats.total}</h3>
+                        </div>
+                      </div>
+
+                      <div className="metric-card">
+                        <div className="metric-icon" style={{ backgroundColor: 'rgba(98, 91, 113, 0.1)', color: 'var(--secondary)' }}>
+                          ⚙️
+                        </div>
+                        <div className="metric-info">
+                          <span className="metric-label">Monoblocs en Stock</span>
+                          <h3 className="metric-value">{stockStats.monobloc}</h3>
+                        </div>
+                      </div>
+
+                      <div className="metric-card">
+                        <div className="metric-icon" style={{ backgroundColor: 'rgba(20, 164, 77, 0.1)', color: 'var(--success)' }}>
+                          ⚡
+                        </div>
+                        <div className="metric-info">
+                          <span className="metric-label">Splits en Stock</span>
+                          <h3 className="metric-value">{stockStats.split}</h3>
+                        </div>
+                      </div>
+
+                      <div className="metric-card">
+                        <div className="metric-icon" style={{ backgroundColor: 'rgba(103, 80, 164, 0.1)', color: 'var(--primary)' }}>
+                          🏢
+                        </div>
+                        <div className="metric-info">
+                          <span className="metric-label">Dépôts Actifs</span>
+                          <h3 className="metric-value">{stockStats.depotsCount}</h3>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="stock-layout" style={{ marginTop: '1.5rem' }}>
                   {/* Left Column: Depots List */}
-                  <div className="stock-depots-sidebar">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', width: '100%' }}>
-                      <h2 style={{ fontSize: '1.1rem', fontWeight: '600' }}>Dépôts</h2>
+                  <div className="stock-depots-sidebar" style={{ backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', padding: '1.25rem', boxShadow: 'var(--elevation-1)', minHeight: '340px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
+                      <h2 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>📋 Liste des Dépôts</h2>
                       {!isReadOnly && (
                         <button 
                           className="btn btn-primary btn-sm" 
@@ -3063,9 +3116,9 @@ function App() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {depots.length === 0 ? (
-                        <div style={{ padding: '1.5rem', textAlign: 'center', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-light)', color: 'var(--text-muted)' }}>
+                        <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', border: '1px dashed var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
                           Aucun dépôt configuré.
                         </div>
                       ) : (
@@ -3075,45 +3128,57 @@ function App() {
                           return (
                             <div 
                               key={depot.id}
-                              className="card"
                               style={{ 
                                 cursor: 'pointer', 
-                                padding: '1rem', 
-                                border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-light)',
-                                backgroundColor: isSelected ? 'rgba(103, 80, 164, 0.03)' : 'var(--surface)',
-                                boxShadow: isSelected ? 'var(--elevation-2)' : 'none',
+                                padding: '0.75rem 1rem', 
+                                borderRadius: 'var(--radius-sm)',
+                                borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
+                                backgroundColor: isSelected ? 'var(--primary-container)' : 'transparent',
+                                color: isSelected ? 'var(--on-primary-container)' : 'var(--text-primary)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.25rem',
+                                transition: 'all var(--transition-fast)',
                                 position: 'relative'
                               }}
+                              className="depot-item-row"
                               onClick={() => setSelectedDepotId(depot.id)}
                             >
-                              <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.25rem', paddingRight: '3rem' }}>
-                                📦 {depot.nom}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: '2.5rem' }}>
+                                <span style={{ fontWeight: isSelected ? '600' : '500', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  📦 {depot.nom}
+                                </span>
+                                <span style={{ 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 'bold', 
+                                  backgroundColor: isSelected ? 'var(--primary)' : 'var(--border-color)', 
+                                  color: isSelected ? 'white' : 'var(--text-secondary)',
+                                  padding: '1px 8px',
+                                  borderRadius: 'var(--radius-full)'
+                                }}>
+                                  {stockCount}
+                                </span>
                               </div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                                {depot.sites_rattaches?.map(s => (
-                                  <span key={s} style={{ backgroundColor: 'var(--secondary-container)', color: 'var(--on-secondary-container)', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '0.7rem' }}>
-                                    {s}
-                                  </span>
-                                ))}
-                              </div>
-                              <div style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--primary)' }}>
-                                {stockCount} climatiseur{stockCount > 1 ? 's' : ''} en stock
+                              <div style={{ fontSize: '0.7rem', color: isSelected ? 'var(--primary)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {depot.sites_rattaches?.join(' • ')}
                               </div>
 
-                              {/* Depot Admin Actions */}
+                              {/* Depot Actions Overlay on Hover */}
                               {!isReadOnly && (
-                                <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', display: 'flex', gap: '0.25rem' }}>
+                                <div className="depot-actions-hover" style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '0.2rem' }}>
                                   <button 
                                     className="btn btn-secondary" 
-                                    style={{ width: '24px', height: '24px', padding: 0, fontSize: '0.7rem', borderRadius: 'var(--radius-xs)' }}
+                                    style={{ width: '22px', height: '22px', padding: 0, fontSize: '0.65rem', borderRadius: 'var(--radius-xs)', backgroundColor: 'var(--surface)', border: '1px solid var(--border-light)' }}
                                     onClick={(e) => { e.stopPropagation(); startEditDepot(depot); }}
+                                    title="Modifier le dépôt"
                                   >
                                     ✏️
                                   </button>
                                   <button 
                                     className="btn btn-danger" 
-                                    style={{ width: '24px', height: '24px', padding: 0, fontSize: '0.7rem', borderRadius: 'var(--radius-xs)' }}
+                                    style={{ width: '22px', height: '22px', padding: 0, fontSize: '0.65rem', borderRadius: 'var(--radius-xs)' }}
                                     onClick={(e) => { e.stopPropagation(); handleDeleteDepot(depot.id); }}
+                                    title="Supprimer le dépôt"
                                   >
                                     🗑️
                                   </button>
@@ -3127,7 +3192,7 @@ function App() {
                   </div>
 
                   {/* Right Column: Stock Grid / Table */}
-                  <div className="stock-content-panel">
+                  <div className="stock-content-panel" style={{ backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', padding: '1.25rem', boxShadow: 'var(--elevation-1)' }}>
                     {!selectedDepotId ? (
                       <div className="empty-state" style={{ height: '300px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                         <div className="empty-icon"><IconInfo /></div>
@@ -3139,39 +3204,67 @@ function App() {
                     ) : (
                       (() => {
                         const currentDepot = depots.find(d => d.id === selectedDepotId);
-                        const stockClims = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === selectedDepotId);
+                        let stockClims = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === selectedDepotId);
+                        
+                        // Apply local search query for stock
+                        if (stockSearchQuery.trim()) {
+                          const sq = stockSearchQuery.toLowerCase().trim();
+                          stockClims = stockClims.filter(c => 
+                            (c.numero && c.numero.toLowerCase().includes(sq)) ||
+                            (c.type_contrat && c.type_contrat.toLowerCase().includes(sq)) ||
+                            (c.observations && c.observations.toLowerCase().includes(sq)) ||
+                            (c.puissance && String(c.puissance).includes(sq))
+                          );
+                        }
+
                         return (
                           <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                              <h2 style={{ fontSize: '1.2rem', fontWeight: '600' }}>
-                                📦 Stock de : {currentDepot ? currentDepot.nom : 'Dépôt'}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                              <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
+                                📦 Inventaire : {currentDepot ? currentDepot.nom : 'Dépôt'}
                               </h2>
-                              {!isReadOnly && (
-                                <button 
-                                  className="btn btn-primary" 
-                                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', marginLeft: 'auto' }}
-                                  onClick={() => {
-                                    setEditingStockClim(null);
-                                    setStockClimNumber('');
-                                    setStockClimType('monobloc');
-                                    setStockClimPower('');
-                                    setStockClimTypeContrat('achat');
-                                    setStockClimObservations('');
-                                    setStockClimDate(new Date().toISOString().split('T')[0]);
-                                    setShowStockClimModal(true);
-                                  }}
-                                >
-                                  ➕ Ajouter au Stock
-                                </button>
-                              )}
+                              
+                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>
+                                {/* Search box inside stock */}
+                                <div className="input-wrapper" style={{ width: '220px', margin: 0 }}>
+                                  <span className="input-icon"><IconSearch /></span>
+                                  <input 
+                                    type="text" 
+                                    className="input-control" 
+                                    value={stockSearchQuery} 
+                                    onChange={(e) => setStockSearchQuery(e.target.value)} 
+                                    placeholder="Rechercher dans ce stock..." 
+                                    style={{ height: '36px', fontSize: '0.85rem' }}
+                                  />
+                                </div>
+
+                                {!isReadOnly && (
+                                  <button 
+                                    className="btn btn-primary" 
+                                    style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', height: '36px' }}
+                                    onClick={() => {
+                                      setEditingStockClim(null);
+                                      setStockClimNumber('');
+                                      setStockClimType('monobloc');
+                                      setStockClimPower('');
+                                      setStockClimTypeContrat('achat');
+                                      setStockClimObservations('');
+                                      setStockClimDate(new Date().toISOString().split('T')[0]);
+                                      setShowStockClimModal(true);
+                                    }}
+                                  >
+                                    ➕ Ajouter au Stock
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {stockClims.length === 0 ? (
                               <div className="empty-state" style={{ height: '240px' }}>
                                 <div className="empty-icon">💨</div>
-                                <div className="empty-title">Aucun climatiseur en stock</div>
+                                <div className="empty-title">Aucun climatiseur trouvé</div>
                                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                  Ce dépôt est actuellement vide. Ajoutez de nouveaux climatiseurs au stock.
+                                  {stockSearchQuery.trim() ? "Aucun climatiseur en stock ne correspond à votre recherche." : "Ce dépôt est actuellement vide."}
                                 </p>
                               </div>
                             ) : (
@@ -3185,7 +3278,7 @@ function App() {
                                         <th>Type</th>
                                         <th>Puissance</th>
                                         <th>Contrat</th>
-                                        <th>Acquisition</th>
+                                        <th>Date d'Acquisition</th>
                                         <th>Observations</th>
                                         {!isReadOnly && <th style={{ width: '160px', textAlign: 'center' }}>Actions</th>}
                                       </tr>
@@ -3215,6 +3308,7 @@ function App() {
                                                   className="btn btn-secondary btn-sm" 
                                                   style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
                                                   onClick={() => startEditStockClim(clim)}
+                                                  title="Modifier la fiche"
                                                 >
                                                   ✏️
                                                 </button>
@@ -3222,6 +3316,7 @@ function App() {
                                                   className="btn btn-danger btn-sm" 
                                                   style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
                                                   onClick={() => handleDeleteStockClim(clim.id)}
+                                                  title="Supprimer du stock"
                                                 >
                                                   🗑️
                                                 </button>
