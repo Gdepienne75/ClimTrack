@@ -181,6 +181,11 @@ function App() {
   const [stockClimObservations, setStockClimObservations] = useState('');
   const [stockClimDate, setStockClimDate] = useState('');
   const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [showManageDepotsModal, setShowManageDepotsModal] = useState(false);
+  const [stockSortField, setStockSortField] = useState('numero');
+  const [stockSortAsc, setStockSortAsc] = useState(true);
+  const [filterStockDepot, setFilterStockDepot] = useState('all');
+  const [filterStockType, setFilterStockType] = useState('all');
 
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [installClim, setInstallClim] = useState(null);
@@ -945,11 +950,68 @@ function App() {
   const getStockStats = () => {
     const visibleDepotIds = depots.map(d => d.id);
     const stockList = climatiseurs.filter(c => c.statut === 'stock' && visibleDepotIds.includes(c.depot_id));
-    const total = stockList.length;
     const monobloc = stockList.filter(c => c.type === 'monobloc').length;
     const split = stockList.filter(c => c.type === 'split').length;
-    const depotsCount = depots.length;
-    return { total, monobloc, split, depotsCount };
+    return { monobloc, split };
+  };
+
+  const getFilteredAndSortedStock = () => {
+    const visibleDepotIds = depots.map(d => d.id);
+    let list = climatiseurs.filter(c => c.statut === 'stock' && visibleDepotIds.includes(c.depot_id));
+    
+    // Filter by depot
+    if (filterStockDepot !== 'all') {
+      list = list.filter(c => c.depot_id === filterStockDepot);
+    }
+    
+    // Filter by type
+    if (filterStockType !== 'all') {
+      list = list.filter(c => c.type === filterStockType);
+    }
+    
+    // Search query
+    if (stockSearchQuery.trim()) {
+      const sq = stockSearchQuery.toLowerCase().trim();
+      list = list.filter(c => 
+        (c.numero && c.numero.toLowerCase().includes(sq)) ||
+        (c.type_contrat && c.type_contrat.toLowerCase().includes(sq)) ||
+        (c.observations && c.observations.toLowerCase().includes(sq)) ||
+        (c.puissance && String(c.puissance).includes(sq))
+      );
+    }
+    
+    // Sort
+    list.sort((a, b) => {
+      let valA, valB;
+      
+      if (stockSortField === 'depot') {
+        const depotA = depots.find(d => d.id === a.depot_id);
+        const depotB = depots.find(d => d.id === b.depot_id);
+        valA = depotA ? depotA.nom.toLowerCase() : '';
+        valB = depotB ? depotB.nom.toLowerCase() : '';
+      } else if (stockSortField === 'puissance') {
+        valA = a.puissance ? Number(a.puissance) : 0;
+        valB = b.puissance ? Number(b.puissance) : 0;
+      } else {
+        valA = a[stockSortField] ? String(a[stockSortField]).toLowerCase() : '';
+        valB = b[stockSortField] ? String(b[stockSortField]).toLowerCase() : '';
+      }
+      
+      if (valA < valB) return stockSortAsc ? -1 : 1;
+      if (valA > valB) return stockSortAsc ? 1 : -1;
+      return 0;
+    });
+    
+    return list;
+  };
+
+  const handleStockSort = (field) => {
+    if (stockSortField === field) {
+      setStockSortAsc(!stockSortAsc);
+    } else {
+      setStockSortField(field);
+      setStockSortAsc(true);
+    }
   };
 
   // --- DEPOT ACTIONS ---
@@ -3053,7 +3115,7 @@ function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <div>
                     <h1 className="dashboard-title" style={{ margin: 0 }}>Gestion des Stocks</h1>
-                    <p className="dashboard-subtitle" style={{ margin: 0 }}>Gérez vos climatiseurs en stock et affectez-les aux locaux.</p>
+                    <p className="dashboard-subtitle" style={{ margin: 0 }}>Consultez et gérez vos climatiseurs en stock et vos dépôts.</p>
                   </div>
                 </div>
 
@@ -3061,347 +3123,285 @@ function App() {
                 {(() => {
                   const stockStats = getStockStats();
                   return (
-                    <div className="metrics-grid" style={{ marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ backgroundColor: 'rgba(103, 80, 164, 0.1)', color: 'var(--primary)' }}>
-                          📦
+                    <div className="stats-grid" style={{ marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                      <div className="stat-card" style={{ cursor: 'default' }}>
+                        <div className="stat-icon-box" style={{ background: '#f0fdf4', color: '#16a34a' }}>
+                          <IconMonobloc />
                         </div>
-                        <div className="metric-info">
-                          <span className="metric-label">Total en Stock</span>
-                          <h3 className="metric-value">{stockStats.total}</h3>
-                        </div>
-                      </div>
-
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ backgroundColor: 'rgba(98, 91, 113, 0.1)', color: 'var(--secondary)' }}>
-                          ⚙️
-                        </div>
-                        <div className="metric-info">
-                          <span className="metric-label">Monoblocs en Stock</span>
-                          <h3 className="metric-value">{stockStats.monobloc}</h3>
+                        <div className="stat-data">
+                          <span className="stat-number">{stockStats.monobloc}</span>
+                          <span className="stat-label">Monoblocs en Stock</span>
                         </div>
                       </div>
 
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ backgroundColor: 'rgba(20, 164, 77, 0.1)', color: 'var(--success)' }}>
-                          ⚡
+                      <div className="stat-card" style={{ cursor: 'default' }}>
+                        <div className="stat-icon-box" style={{ background: '#eff6ff', color: '#3b82f6' }}>
+                          <IconSplit />
                         </div>
-                        <div className="metric-info">
-                          <span className="metric-label">Splits en Stock</span>
-                          <h3 className="metric-value">{stockStats.split}</h3>
-                        </div>
-                      </div>
-
-                      <div className="metric-card">
-                        <div className="metric-icon" style={{ backgroundColor: 'rgba(103, 80, 164, 0.1)', color: 'var(--primary)' }}>
-                          🏢
-                        </div>
-                        <div className="metric-info">
-                          <span className="metric-label">Dépôts Actifs</span>
-                          <h3 className="metric-value">{stockStats.depotsCount}</h3>
+                        <div className="stat-data">
+                          <span className="stat-number">{stockStats.split}</span>
+                          <span className="stat-label">Splits en Stock</span>
                         </div>
                       </div>
                     </div>
                   );
                 })()}
 
-                <div className="stock-layout" style={{ marginTop: '1.5rem' }}>
-                  {/* Left Column: Depots List */}
-                  <div className="stock-depots-sidebar" style={{ backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', padding: '1.25rem', boxShadow: 'var(--elevation-1)', minHeight: '340px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem' }}>
-                      <h2 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>📋 Liste des Dépôts</h2>
+                {/* Stock Management panel */}
+                <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  
+                  {/* Filter and action header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      {/* Search */}
+                      <div className="input-wrapper" style={{ width: '220px', margin: 0 }}>
+                        <span className="input-icon"><IconSearch /></span>
+                        <input 
+                          type="text" 
+                          className="input-control" 
+                          value={stockSearchQuery} 
+                          onChange={(e) => setStockSearchQuery(e.target.value)} 
+                          placeholder="Rechercher..." 
+                          style={{ height: '36px', fontSize: '0.85rem' }}
+                        />
+                      </div>
+
+                      {/* Filter Depot */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '500' }}>Dépôt :</span>
+                        <select 
+                          className="input-control" 
+                          value={filterStockDepot} 
+                          onChange={(e) => setFilterStockDepot(e.target.value)}
+                          style={{ height: '36px', width: '180px', padding: '0 0.5rem', fontSize: '0.85rem' }}
+                        >
+                          <option value="all">Tous les dépôts</option>
+                          {depots.map(d => (
+                            <option key={d.id} value={d.id}>{d.nom}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Filter Type */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '500' }}>Type :</span>
+                        <select 
+                          className="input-control" 
+                          value={filterStockType} 
+                          onChange={(e) => setFilterStockType(e.target.value)}
+                          style={{ height: '36px', width: '140px', padding: '0 0.5rem', fontSize: '0.85rem' }}
+                        >
+                          <option value="all">Tous</option>
+                          <option value="monobloc">Monobloc</option>
+                          <option value="split">Split</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ height: '36px', padding: '0 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                        onClick={() => setShowManageDepotsModal(true)}
+                      >
+                        🏢 Gérer les Dépôts
+                      </button>
+
                       {!isReadOnly && (
                         <button 
-                          className="btn btn-primary btn-sm" 
-                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', marginLeft: 'auto' }}
+                          className="btn btn-primary" 
+                          style={{ height: '36px', padding: '0 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                           onClick={() => {
-                            setEditingDepot(null);
-                            setDepotName('');
-                            setDepotSites([]);
-                            setShowDepotModal(true);
+                            setEditingStockClim(null);
+                            setStockClimNumber('');
+                            setStockClimType('monobloc');
+                            setStockClimPower('');
+                            setStockClimTypeContrat('achat');
+                            setStockClimObservations('');
+                            setStockClimDate(new Date().toISOString().split('T')[0]);
+                            setShowStockClimModal(true);
                           }}
                         >
-                          ➕ Nouveau
+                          ➕ Ajouter au Stock
                         </button>
                       )}
                     </div>
+                  </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {depots.length === 0 ? (
-                        <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', border: '1px dashed var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
-                          Aucun dépôt configuré.
+                  {/* Listings */}
+                  {(() => {
+                    const sortedStock = getFilteredAndSortedStock();
+                    if (sortedStock.length === 0) {
+                      return (
+                        <div className="empty-state" style={{ padding: '3rem 1rem' }}>
+                          <div className="empty-icon">💨</div>
+                          <div className="empty-title">Aucun équipement en stock</div>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            {stockSearchQuery.trim() || filterStockDepot !== 'all' || filterStockType !== 'all' 
+                              ? "Aucun résultat pour les critères de recherche actuels." 
+                              : "Votre stock est vide pour le moment."}
+                          </p>
                         </div>
-                      ) : (
-                        depots.map(depot => {
-                          const stockCount = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === depot.id).length;
-                          const isSelected = selectedDepotId === depot.id;
-                          return (
-                            <div 
-                              key={depot.id}
-                              style={{ 
-                                cursor: 'pointer', 
-                                padding: '0.75rem 1rem', 
-                                borderRadius: 'var(--radius-sm)',
-                                borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
-                                backgroundColor: isSelected ? 'var(--primary-container)' : 'transparent',
-                                color: isSelected ? 'var(--on-primary-container)' : 'var(--text-primary)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '0.25rem',
-                                transition: 'all var(--transition-fast)',
-                                position: 'relative'
-                              }}
-                              className="depot-item-row"
-                              onClick={() => setSelectedDepotId(depot.id)}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: '2.5rem' }}>
-                                <span style={{ fontWeight: isSelected ? '600' : '500', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  📦 {depot.nom}
-                                </span>
-                                <span style={{ 
-                                  fontSize: '0.75rem', 
-                                  fontWeight: 'bold', 
-                                  backgroundColor: isSelected ? 'var(--primary)' : 'var(--border-color)', 
-                                  color: isSelected ? 'white' : 'var(--text-secondary)',
-                                  padding: '1px 8px',
-                                  borderRadius: 'var(--radius-full)'
-                                }}>
-                                  {stockCount}
-                                </span>
-                              </div>
-                              <div style={{ fontSize: '0.7rem', color: isSelected ? 'var(--primary)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {depot.sites_rattaches?.join(' • ')}
-                              </div>
+                      );
+                    }
 
-                              {/* Depot Actions Overlay on Hover */}
-                              {!isReadOnly && (
-                                <div className="depot-actions-hover" style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '0.2rem' }}>
-                                  <button 
-                                    className="btn btn-secondary" 
-                                    style={{ width: '22px', height: '22px', padding: 0, fontSize: '0.65rem', borderRadius: 'var(--radius-xs)', backgroundColor: 'var(--surface)', border: '1px solid var(--border-light)' }}
-                                    onClick={(e) => { e.stopPropagation(); startEditDepot(depot); }}
-                                    title="Modifier le dépôt"
-                                  >
-                                    ✏️
-                                  </button>
-                                  <button 
-                                    className="btn btn-danger" 
-                                    style={{ width: '22px', height: '22px', padding: 0, fontSize: '0.65rem', borderRadius: 'var(--radius-xs)' }}
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteDepot(depot.id); }}
-                                    title="Supprimer le dépôt"
-                                  >
-                                    🗑️
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
+                    const renderStockSortIcon = (field) => {
+                      if (stockSortField !== field) return null;
+                      return stockSortAsc ? ' ▲' : ' ▼';
+                    };
 
-                  {/* Right Column: Stock Grid / Table */}
-                  <div className="stock-content-panel" style={{ backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', padding: '1.25rem', boxShadow: 'var(--elevation-1)' }}>
-                    {!selectedDepotId ? (
-                      <div className="empty-state" style={{ height: '300px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <div className="empty-icon"><IconInfo /></div>
-                        <div className="empty-title">Sélectionnez un dépôt</div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                          Veuillez choisir un dépôt de stockage dans la liste de gauche pour en consulter l'inventaire.
-                        </p>
-                      </div>
-                    ) : (
-                      (() => {
-                        const currentDepot = depots.find(d => d.id === selectedDepotId);
-                        let stockClims = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === selectedDepotId);
-                        
-                        // Apply local search query for stock
-                        if (stockSearchQuery.trim()) {
-                          const sq = stockSearchQuery.toLowerCase().trim();
-                          stockClims = stockClims.filter(c => 
-                            (c.numero && c.numero.toLowerCase().includes(sq)) ||
-                            (c.type_contrat && c.type_contrat.toLowerCase().includes(sq)) ||
-                            (c.observations && c.observations.toLowerCase().includes(sq)) ||
-                            (c.puissance && String(c.puissance).includes(sq))
-                          );
-                        }
-
-                        return (
-                          <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-                              <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
-                                📦 Inventaire : {currentDepot ? currentDepot.nom : 'Dépôt'}
-                              </h2>
-                              
-                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>
-                                {/* Search box inside stock */}
-                                <div className="input-wrapper" style={{ width: '220px', margin: 0 }}>
-                                  <span className="input-icon"><IconSearch /></span>
-                                  <input 
-                                    type="text" 
-                                    className="input-control" 
-                                    value={stockSearchQuery} 
-                                    onChange={(e) => setStockSearchQuery(e.target.value)} 
-                                    placeholder="Rechercher dans ce stock..." 
-                                    style={{ height: '36px', fontSize: '0.85rem' }}
-                                  />
-                                </div>
-
-                                {!isReadOnly && (
-                                  <button 
-                                    className="btn btn-primary" 
-                                    style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem', height: '36px' }}
-                                    onClick={() => {
-                                      setEditingStockClim(null);
-                                      setStockClimNumber('');
-                                      setStockClimType('monobloc');
-                                      setStockClimPower('');
-                                      setStockClimTypeContrat('achat');
-                                      setStockClimObservations('');
-                                      setStockClimDate(new Date().toISOString().split('T')[0]);
-                                      setShowStockClimModal(true);
-                                    }}
-                                  >
-                                    ➕ Ajouter au Stock
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {stockClims.length === 0 ? (
-                              <div className="empty-state" style={{ height: '240px' }}>
-                                <div className="empty-icon">💨</div>
-                                <div className="empty-title">Aucun climatiseur trouvé</div>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                  {stockSearchQuery.trim() ? "Aucun climatiseur en stock ne correspond à votre recherche." : "Ce dépôt est actuellement vide."}
-                                </p>
-                              </div>
-                            ) : (
-                              <>
-                                {/* Table on desktop */}
-                                <div className="desktop-only table-responsive" style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                                  <table className="table">
-                                    <thead>
-                                      <tr>
-                                        <th>N° Climatiseur</th>
-                                        <th>Type</th>
-                                        <th>Puissance</th>
-                                        <th>Contrat</th>
-                                        <th>Date d'Acquisition</th>
-                                        <th>Observations</th>
-                                        {!isReadOnly && <th style={{ width: '160px', textAlign: 'center' }}>Actions</th>}
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {stockClims.map(clim => (
-                                        <tr key={clim.id} className="clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
-                                          if (e.target.closest('button')) return;
-                                          setSelectedDetailClim(clim);
-                                        }}>
-                                          <td className="text-highlight">{clim.numero}</td>
-                                          <td>
-                                            <span className={`fiche-badge ${clim.type}`}>
-                                              {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
-                                            </span>
-                                          </td>
-                                          <td>{clim.puissance ? `${clim.puissance} W` : '-'}</td>
-                                          <td style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</td>
-                                          <td>{formatDateFR(clim.date_pose)}</td>
-                                          <td style={{ fontStyle: 'italic', color: 'var(--text-secondary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {clim.observations || '-'}
-                                          </td>
-                                          {!isReadOnly && (
-                                            <td>
-                                              <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
-                                                <button 
-                                                  className="btn btn-secondary btn-sm" 
-                                                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
-                                                  onClick={() => startEditStockClim(clim)}
-                                                  title="Modifier la fiche"
-                                                >
-                                                  ✏️
-                                                </button>
-                                                <button 
-                                                  className="btn btn-danger btn-sm" 
-                                                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
-                                                  onClick={() => handleDeleteStockClim(clim.id)}
-                                                  title="Supprimer du stock"
-                                                >
-                                                  🗑️
-                                                </button>
-                                                <button 
-                                                  className="btn btn-primary btn-sm" 
-                                                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
-                                                  onClick={() => startInstallFlow(clim)}
-                                                >
-                                                  🔧 Installer
-                                                </button>
-                                              </div>
-                                            </td>
-                                          )}
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-
-                                {/* Cards on mobile */}
-                                <div className="mobile-only report-cards-grid">
-                                  {stockClims.map(clim => (
-                                    <div key={clim.id} className="report-card clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
-                                      if (e.target.closest('.report-card-footer') || e.target.closest('button')) return;
-                                      setSelectedDetailClim(clim);
-                                    }}>
-                                      <div className="report-card-content">
-                                        <div className="report-card-header">
-                                          <span className="report-card-num">N° {clim.numero}</span>
-                                          <span className={`fiche-badge ${clim.type}`}>
-                                            {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
-                                          </span>
+                    return (
+                      <>
+                        {/* Table on desktop */}
+                        <div className="desktop-only table-responsive" style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                          <table className="table">
+                            <thead>
+                              <tr>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('numero')}>
+                                  N° Climatiseur {renderStockSortIcon('numero')}
+                                </th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('type')}>
+                                  Type {renderStockSortIcon('type')}
+                                </th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('puissance')}>
+                                  Puissance {renderStockSortIcon('puissance')}
+                                </th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('type_contrat')}>
+                                  Contrat {renderStockSortIcon('type_contrat')}
+                                </th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('depot')}>
+                                  Dépôt {renderStockSortIcon('depot')}
+                                </th>
+                                <th>Sites Rattachés</th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('date_pose')}>
+                                  Acquisition {renderStockSortIcon('date_pose')}
+                                </th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('observations')}>
+                                  Observations {renderStockSortIcon('observations')}
+                                </th>
+                                {!isReadOnly && <th style={{ width: '160px', textAlign: 'center' }}>Actions</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortedStock.map(clim => {
+                                const depot = depots.find(d => d.id === clim.depot_id);
+                                return (
+                                  <tr key={clim.id} className="clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
+                                    if (e.target.closest('button')) return;
+                                    setSelectedDetailClim(clim);
+                                  }}>
+                                    <td className="text-highlight">{clim.numero}</td>
+                                    <td>
+                                      <span className={`fiche-badge ${clim.type}`}>
+                                        {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                      </span>
+                                    </td>
+                                    <td>{clim.puissance ? `${clim.puissance} W` : '-'}</td>
+                                    <td style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</td>
+                                    <td style={{ fontWeight: '500' }}>📦 {depot ? depot.nom : '-'}</td>
+                                    <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                      {depot?.sites_rattaches?.join(' • ') || '-'}
+                                    </td>
+                                    <td>{formatDateFR(clim.date_pose)}</td>
+                                    <td style={{ fontStyle: 'italic', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {clim.observations || '-'}
+                                    </td>
+                                    {!isReadOnly && (
+                                      <td>
+                                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                                          <button 
+                                            className="btn btn-secondary btn-sm" 
+                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                                            onClick={() => startEditStockClim(clim)}
+                                            title="Modifier la fiche"
+                                          >
+                                            ✏️
+                                          </button>
+                                          <button 
+                                            className="btn btn-danger btn-sm" 
+                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                                            onClick={() => handleDeleteStockClim(clim.id)}
+                                            title="Supprimer du stock"
+                                          >
+                                            🗑️
+                                          </button>
+                                          <button 
+                                            className="btn btn-primary btn-sm" 
+                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                                            onClick={() => startInstallFlow(clim)}
+                                            title="Installer sur site"
+                                          >
+                                            🔧 Installer
+                                          </button>
                                         </div>
-                                        <div className="report-card-body">
-                                          <div className="report-card-row">
-                                            <span className="report-card-label">⚡ Puissance</span>
-                                            <span className="report-card-value">{clim.puissance ? `${clim.puissance} W` : '-'}</span>
-                                          </div>
-                                          <div className="report-card-row">
-                                            <span className="report-card-label">🔑 Contrat</span>
-                                            <span className="report-card-value" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</span>
-                                          </div>
-                                          <div className="report-card-row">
-                                            <span className="report-card-label">📅 Acquisition</span>
-                                            <span className="report-card-value">{formatDateFR(clim.date_pose)}</span>
-                                          </div>
-                                          <div className="report-card-row">
-                                            <span className="report-card-label">📝 Observations</span>
-                                            <span className="report-card-value" style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>{clim.observations || '-'}</span>
-                                          </div>
-                                        </div>
-                                        {!isReadOnly && (
-                                          <div className="report-card-footer" style={{ gap: '0.25rem' }}>
-                                            <button className="btn btn-secondary btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => startEditStockClim(clim)}>
-                                              ✏️
-                                            </button>
-                                            <button className="btn btn-danger btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => handleDeleteStockClim(clim.id)}>
-                                              🗑️
-                                            </button>
-                                            <button className="btn btn-primary btn-sm" style={{ flex: 2, padding: '0.25rem', fontSize: '0.75rem' }} onClick={() => startInstallFlow(clim)}>
-                                              🔧 Installer
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Cards on mobile */}
+                        <div className="mobile-only report-cards-grid">
+                          {sortedStock.map(clim => {
+                            const depot = depots.find(d => d.id === clim.depot_id);
+                            return (
+                              <div key={clim.id} className="report-card clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
+                                if (e.target.closest('.report-card-footer') || e.target.closest('button')) return;
+                                setSelectedDetailClim(clim);
+                              }}>
+                                <div className="report-card-content">
+                                  <div className="report-card-header">
+                                    <span className="report-card-num">N° {clim.numero}</span>
+                                    <span className={`fiche-badge ${clim.type}`}>
+                                      {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
+                                    </span>
+                                  </div>
+                                  <div className="report-card-body">
+                                    <div className="report-card-row">
+                                      <span className="report-card-label">🏢 Dépôt</span>
+                                      <span className="report-card-value" style={{ fontWeight: '500' }}>📦 {depot ? depot.nom : '-'}</span>
                                     </div>
-                                  ))}
+                                    <div className="report-card-row">
+                                      <span className="report-card-label">⚡ Puissance</span>
+                                      <span className="report-card-value">{clim.puissance ? `${clim.puissance} W` : '-'}</span>
+                                    </div>
+                                    <div className="report-card-row">
+                                      <span className="report-card-label">🔑 Contrat</span>
+                                      <span className="report-card-value" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</span>
+                                    </div>
+                                    <div className="report-card-row">
+                                      <span className="report-card-label">📅 Acquisition</span>
+                                      <span className="report-card-value">{formatDateFR(clim.date_pose)}</span>
+                                    </div>
+                                    <div className="report-card-row">
+                                      <span className="report-card-label">📝 Observations</span>
+                                      <span className="report-card-value" style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>{clim.observations || '-'}</span>
+                                    </div>
+                                  </div>
+                                  {!isReadOnly && (
+                                    <div className="report-card-footer" style={{ gap: '0.25rem' }}>
+                                      <button className="btn btn-secondary btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => startEditStockClim(clim)}>
+                                        ✏️
+                                      </button>
+                                      <button className="btn btn-danger btn-sm" style={{ flex: 1, padding: '0.25rem' }} onClick={() => handleDeleteStockClim(clim.id)}>
+                                        🗑️
+                                      </button>
+                                      <button className="btn btn-primary btn-sm" style={{ flex: 2, padding: '0.25rem', fontSize: '0.75rem' }} onClick={() => startInstallFlow(clim)}>
+                                        🔧 Installer
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
-                              </>
-                            )}
-                          </>
-                        );
-                      })()
-                    )}
-                  </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -3681,6 +3681,104 @@ function App() {
                   >
                     Fermer
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- MANAGE DEPOTS LIST MODAL --- */}
+          {showManageDepotsModal && (
+            <div className="modal-backdrop" onClick={() => setShowManageDepotsModal(false)}>
+              <div className="modal" style={{ maxWidth: '800px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2 className="modal-title">🏢 Dépôts de Stockage</h2>
+                  <button className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} onClick={() => setShowManageDepotsModal(false)}>✕</button>
+                </div>
+                <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      Gérez les dépôts physiques de stockage et les sites géographiques qui y sont rattachés.
+                    </p>
+                    {!isReadOnly && (
+                      <button 
+                        className="btn btn-primary btn-sm" 
+                        onClick={() => {
+                          setEditingDepot(null);
+                          setDepotName('');
+                          setDepotSites([]);
+                          setShowDepotModal(true);
+                        }}
+                      >
+                        ➕ Nouveau Dépôt
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="table-responsive" style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', maxHeight: '300px', overflowY: 'auto' }}>
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Nom du Dépôt</th>
+                          <th>Sites Rattachés</th>
+                          <th>Nb en Stock</th>
+                          {!isReadOnly && <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {depots.length === 0 ? (
+                          <tr>
+                            <td colSpan={isReadOnly ? 3 : 4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                              Aucun dépôt configuré.
+                            </td>
+                          </tr>
+                        ) : (
+                          depots.map(depot => {
+                            const stockCount = climatiseurs.filter(c => c.statut === 'stock' && c.depot_id === depot.id).length;
+                            return (
+                              <tr key={depot.id}>
+                                <td style={{ fontWeight: '600' }}>📦 {depot.nom}</td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                                    {depot.sites_rattaches?.map(s => (
+                                      <span key={s} style={{ backgroundColor: 'var(--secondary-container)', color: 'var(--on-secondary-container)', padding: '1px 6px', borderRadius: 'var(--radius-xs)', fontSize: '0.7rem' }}>
+                                        {s}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td style={{ fontWeight: '500' }}>{stockCount} clim{stockCount > 1 ? 's' : ''}</td>
+                                {!isReadOnly && (
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                                      <button 
+                                        className="btn btn-secondary btn-sm" 
+                                        style={{ padding: '0.2rem 0.4rem' }}
+                                        onClick={() => startEditDepot(depot)}
+                                        title="Modifier le dépôt"
+                                      >
+                                        ✏️
+                                      </button>
+                                      <button 
+                                        className="btn btn-danger btn-sm" 
+                                        style={{ padding: '0.2rem 0.4rem' }}
+                                        onClick={() => handleDeleteDepot(depot.id)}
+                                        title="Supprimer le dépôt"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-secondary" onClick={() => setShowManageDepotsModal(false)}>Fermer</button>
                 </div>
               </div>
             </div>
