@@ -115,6 +115,7 @@ function App() {
   const [buildingsBySite, setBuildingsBySite] = useState({});
   const [floorsByBuilding, setFloorsByBuilding] = useState({});
   const [roomsByFloor, setRoomsByFloor] = useState({});
+  const [locaux, setLocaux] = useState([]);
   
   // Step Flow states for adding a Climatiseur
   const [currentStep, setCurrentStep] = useState(0); 
@@ -327,6 +328,15 @@ function App() {
           setSelectedDepotId(prev => prev || filteredDepots[0].id);
         }
       }
+
+      // 6. Fetch all locaux (for guided installation dropdowns)
+      let queryLocaux = supabase.from('locaux').select('*');
+      if (!isAllSitesAllowed) {
+        queryLocaux = queryLocaux.in('site', allowedSites);
+      }
+      const { data: locauxData, error: errLocaux } = await queryLocaux;
+      if (errLocaux) throw errLocaux;
+      setLocaux(locauxData || []);
 
     } catch (err) {
       console.error("Erreur de chargement Supabase:", err);
