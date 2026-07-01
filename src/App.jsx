@@ -1601,7 +1601,7 @@ function App() {
     <div className="app-container">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="toast">
+        <div className="toast-message">
           <IconCheck />
           <span>{toastMessage}</span>
         </div>
