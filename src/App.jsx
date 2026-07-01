@@ -3253,10 +3253,11 @@ function App() {
                     return (
                       <>
                         {/* Table on desktop */}
-                        <div className="desktop-only table-responsive" style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                          <table className="table">
+                        <div className="table-container desktop-only">
+                          <table className="data-table">
                             <thead>
                               <tr>
+                                <th style={{ width: '50px', cursor: 'default' }}>Photo</th>
                                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('numero')}>
                                   N° Climatiseur {renderStockSortIcon('numero')}
                                 </th>
@@ -3273,65 +3274,88 @@ function App() {
                                   Dépôt {renderStockSortIcon('depot')}
                                 </th>
                                 <th>Sites Rattachés</th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('enregistre_par')}>
+                                  Opérateur {renderStockSortIcon('enregistre_par')}
+                                </th>
                                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('date_pose')}>
-                                  Acquisition {renderStockSortIcon('date_pose')}
+                                  Date d'Acquisition {renderStockSortIcon('date_pose')}
                                 </th>
                                 <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleStockSort('observations')}>
                                   Observations {renderStockSortIcon('observations')}
                                 </th>
-                                {!isReadOnly && <th style={{ width: '160px', textAlign: 'center' }}>Actions</th>}
+                                {!isReadOnly && <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>}
                               </tr>
                             </thead>
                             <tbody>
                               {sortedStock.map(clim => {
                                 const depot = depots.find(d => d.id === clim.depot_id);
                                 return (
-                                  <tr key={clim.id} className="clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
-                                    if (e.target.closest('button')) return;
-                                    setSelectedDetailClim(clim);
-                                  }}>
-                                    <td className="text-highlight">{clim.numero}</td>
-                                    <td>
+                                  <tr 
+                                    key={clim.id} 
+                                    className="clickable-row" 
+                                    style={{ cursor: 'pointer' }} 
+                                    onClick={(e) => {
+                                      if (e.target.closest('td[data-label="Actions"]') || e.target.closest('.table-thumb') || e.target.closest('button')) {
+                                        return;
+                                      }
+                                      setSelectedDetailClim(clim);
+                                    }}
+                                  >
+                                    <td data-label="Photo">
+                                      {clim.photo_url ? (
+                                        <img 
+                                          src={clim.photo_url} 
+                                          className="table-thumb" 
+                                          alt="Miniature" 
+                                          onClick={() => window.open(clim.photo_url, '_blank')} 
+                                        />
+                                      ) : (
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Aucune</span>
+                                      )}
+                                    </td>
+                                    <td data-label="N° Climatiseur" className="text-highlight">{clim.numero}</td>
+                                    <td data-label="Type">
                                       <span className={`fiche-badge ${clim.type}`}>
                                         {clim.type === 'monobloc' ? 'Monobloc' : 'Split'}
                                       </span>
                                     </td>
-                                    <td>{clim.puissance ? `${clim.puissance} W` : '-'}</td>
-                                    <td style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</td>
-                                    <td style={{ fontWeight: '500' }}>📦 {depot ? depot.nom : '-'}</td>
-                                    <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                    <td data-label="Puissance">{clim.puissance ? `${clim.puissance} W` : '-'}</td>
+                                    <td data-label="Contrat" style={{ textTransform: 'capitalize' }}>{clim.type_contrat || 'achat'}</td>
+                                    <td data-label="Dépôt" style={{ fontWeight: '500' }}>📦 {depot ? depot.nom : '-'}</td>
+                                    <td data-label="Sites Rattachés" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                                       {depot?.sites_rattaches?.join(' • ') || '-'}
                                     </td>
-                                    <td>{formatDateFR(clim.date_pose)}</td>
-                                    <td style={{ fontStyle: 'italic', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <td data-label="Opérateur" style={{ textTransform: 'capitalize' }}>{clim.enregistre_par || '-'}</td>
+                                    <td data-label="Acquisition">{formatDateFR(clim.date_pose)}</td>
+                                    <td data-label="Observations" style={{ fontStyle: 'italic', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                       {clim.observations || '-'}
                                     </td>
                                     {!isReadOnly && (
-                                      <td>
+                                      <td data-label="Actions" style={{ textAlign: 'center' }}>
                                         <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
                                           <button 
-                                            className="btn btn-secondary btn-sm" 
-                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                                            className="btn btn-secondary" 
+                                            style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
                                             onClick={() => startEditStockClim(clim)}
                                             title="Modifier la fiche"
                                           >
                                             ✏️
                                           </button>
                                           <button 
-                                            className="btn btn-danger btn-sm" 
-                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                                            className="btn btn-danger" 
+                                            style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
                                             onClick={() => handleDeleteStockClim(clim.id)}
                                             title="Supprimer du stock"
                                           >
-                                            🗑️
+                                            <IconTrash />
                                           </button>
                                           <button 
-                                            className="btn btn-primary btn-sm" 
-                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                                            className="btn btn-secondary" 
+                                            style={{ width: '28px', height: '28px', padding: 0, borderRadius: 'var(--radius-sm)' }}
                                             onClick={() => startInstallFlow(clim)}
                                             title="Installer sur site"
                                           >
-                                            🔧 Installer
+                                            🔧
                                           </button>
                                         </div>
                                       </td>
