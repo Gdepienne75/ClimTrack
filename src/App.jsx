@@ -1313,24 +1313,56 @@ function App() {
 
   const handleToggleReservation = async (clim) => {
     if (isReadOnly) return;
-    const newStatut = clim.statut === 'reserve' ? 'stock' : 'reserve';
-    try {
-      const { error } = await supabase
-        .from('climatiseurs')
-        .update({ statut: newStatut })
-        .eq('id', clim.id);
+    
+    if (clim.statut === 'reserve') {
+      if (window.confirm(`Voulez-vous libérer le climatiseur N° ${clim.numero} et effacer ses observations de réservation ?`)) {
+        try {
+          const { error } = await supabase
+            .from('climatiseurs')
+            .update({ 
+              statut: 'stock',
+              observations: null
+            })
+            .eq('id', clim.id);
 
-      if (error) throw error;
-      
-      triggerToast(
-        newStatut === 'reserve' 
-          ? `🔒 Climatiseur N° ${clim.numero} mis en réservation.` 
-          : `🔓 Climatiseur N° ${clim.numero} libéré de sa réservation.`
+          if (error) throw error;
+          triggerToast(`🔓 Climatiseur N° ${clim.numero} libéré de sa réservation.`);
+          await loadData();
+        } catch (err) {
+          console.error("Error unreserving:", err);
+          alert("Erreur lors de la libération.");
+        }
+      }
+    } else {
+      const note = window.prompt(
+        "Veuillez renseigner une observation pour cette réservation (ex: destination de l'appareil, contact...) :", 
+        clim.observations || ""
       );
-      await loadData();
-    } catch (err) {
-      console.error("Error toggling reservation:", err);
-      alert("Erreur lors de la modification du statut de réservation.");
+      if (note === null) return; // Annulé
+      
+      const trimmedNote = note.trim();
+      if (!trimmedNote) {
+        alert("Vous devez obligatoirement renseigner une observation (destination ou contact) pour réserver l'appareil.");
+        return;
+      }
+
+      try {
+        const { error } = await supabase
+          .from('climatiseurs')
+          .update({ 
+            statut: 'reserve',
+            observations: trimmedNote
+          })
+          .eq('id', clim.id);
+
+        if (error) throw error;
+        
+        triggerToast(`🔒 Climatiseur N° ${clim.numero} mis en réservation.`);
+        await loadData();
+      } catch (err) {
+        console.error("Error reserving:", err);
+        alert("Erreur lors de la réservation.");
+      }
     }
   };
 
