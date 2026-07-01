@@ -763,7 +763,12 @@ function App() {
       if (selectedStockIdToLink) setSelectedStockIdToLink(null);
       return;
     }
-    const matchedStock = climatiseurs.find(c => c.statut === 'stock' && c.numero.toLowerCase() === trimmed.toLowerCase());
+    const matchedStock = climatiseurs.find(c => {
+      if (c.statut !== 'stock' || c.numero.toLowerCase() !== trimmed.toLowerCase()) return false;
+      const depot = depots.find(d => d.id === c.depot_id);
+      if (!depot) return false;
+      return depot.sites_rattaches && depot.sites_rattaches.includes(selectedSite);
+    });
     if (matchedStock) {
       setSelectedStockIdToLink(matchedStock.id);
       setClimType(matchedStock.type || 'monobloc');
@@ -2609,7 +2614,12 @@ function App() {
                           
                           {/* Stock selection dropdown if stock is available */}
                           {(() => {
-                            const stockAvailable = climatiseurs.filter(c => c.statut === 'stock');
+                            const stockAvailable = climatiseurs.filter(c => {
+                              if (c.statut !== 'stock') return false;
+                              const depot = depots.find(d => d.id === c.depot_id);
+                              if (!depot) return false;
+                              return depot.sites_rattaches && depot.sites_rattaches.includes(selectedSite);
+                            });
                             if (stockAvailable.length === 0) return null;
                             return (
                               <div className="form-group" style={{ backgroundColor: 'var(--primary-container)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)', color: 'var(--on-primary-container)' }}>
