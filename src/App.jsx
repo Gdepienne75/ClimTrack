@@ -193,6 +193,10 @@ function App() {
   const [installBatiment, setInstallBatiment] = useState('');
   const [installEtage, setInstallEtage] = useState('');
   const [installLocalisation, setInstallLocalisation] = useState('');
+  const [installCustomSite, setInstallCustomSite] = useState('');
+  const [installCustomBatiment, setInstallCustomBatiment] = useState('');
+  const [installCustomEtage, setInstallCustomEtage] = useState('');
+  const [installCustomLocalisation, setInstallCustomLocalisation] = useState('');
 
   // Toast message
   const [toastMessage, setToastMessage] = useState('');
@@ -679,6 +683,7 @@ function App() {
     setClimTypeContrat('achat');
     setClimObservations('');
     setShowAddFormOverride(false);
+    setSelectedStockIdToLink(null);
   };
 
   // Filter climatiseurs matching selected location
@@ -710,6 +715,58 @@ function App() {
     }
   };
 
+  const [selectedStockIdToLink, setSelectedStockIdToLink] = useState(null);
+
+  const handleSelectStockClimToInstall = (id) => {
+    setSelectedStockIdToLink(id);
+    if (!id) {
+      setClimNumber('');
+      setClimType('monobloc');
+      setClimPower('');
+      setClimDate(new Date().toISOString().split('T')[0]);
+      setClimTypeContrat('achat');
+      setClimObservations('');
+      setClimPhoto(null);
+      return;
+    }
+    const clim = climatiseurs.find(c => c.id === id);
+    if (clim) {
+      setClimNumber(clim.numero);
+      setClimType(clim.type || 'monobloc');
+      setClimPower(clim.puissance ? String(clim.puissance) : '');
+      setClimDate(new Date().toISOString().split('T')[0]);
+      setClimTypeContrat(clim.type_contrat || 'achat');
+      setClimObservations(clim.observations || '');
+      setClimPhoto(clim.photo_url || null);
+    }
+  };
+
+  const handleClimNumberChange = (value) => {
+    setClimNumber(value);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      if (selectedStockIdToLink) setSelectedStockIdToLink(null);
+      return;
+    }
+    const matchedStock = climatiseurs.find(c => c.statut === 'stock' && c.numero.toLowerCase() === trimmed.toLowerCase());
+    if (matchedStock) {
+      setSelectedStockIdToLink(matchedStock.id);
+      setClimType(matchedStock.type || 'monobloc');
+      setClimPower(matchedStock.puissance ? String(matchedStock.puissance) : '');
+      setClimTypeContrat(matchedStock.type_contrat || 'achat');
+      setClimObservations(matchedStock.observations || '');
+      setClimPhoto(matchedStock.photo_url || null);
+      triggerToast(`📦 Appareil en stock "${matchedStock.numero}" détecté et pré-rempli !`);
+    } else {
+      if (selectedStockIdToLink) {
+        const prevClim = climatiseurs.find(c => c.id === selectedStockIdToLink);
+        if (prevClim && prevClim.numero.toLowerCase() !== trimmed.toLowerCase()) {
+          setSelectedStockIdToLink(null);
+        }
+      }
+    }
+  };
+
   // Add a new climatiseur to Supabase DB and upload image to Supabase Storage
   const handleRegisterClim = async (e) => {
     e.preventDefault();
@@ -726,7 +783,7 @@ function App() {
       let photoUrl = null;
 
       // 1. Upload photo to Supabase storage bucket if selected
-      if (climPhoto) {
+      if (climPhoto && !climPhoto.startsWith('http')) {
         setIsCompressing(true); // show loader
         const blob = base64ToBlob(climPhoto);
         const fileName = `clim_${climNumber.trim()}_${Date.now()}.jpg`;
@@ -751,6 +808,8 @@ function App() {
           .getPublicUrl(fileName);
 
         photoUrl = publicUrlData.publicUrl;
+      } else if (climPhoto && climPhoto.startsWith('http')) {
+        photoUrl = climPhoto;
       }
 
       // 2. Add location to locaux DB table if it does not exist yet (database check)
@@ -786,37 +845,62 @@ function App() {
         }));
       }
 
-      // 3. Add climatiseur record to database
-      const newClim = {
-        site: selectedSite,
-        batiment: selectedBuilding,
-        etage: selectedFloor,
-        localisation: selectedLocation,
-        numero: climNumber.trim(),
-        type: climType,
-        puissance: climPower ? Number(climPower) : null,
-        date_pose: climDate,
-        photo_url: photoUrl,
-        type_contrat: climTypeContrat,
-        observations: climObservations.trim() || null,
-        enregistre_par: loggedInUser || 'admin',
-        date_ajout: new Date().toISOString().split('T')[0]
-      };
+      // 3. Add or update climatiseur record
+      if (selectedStockIdToLink) {
+        const updateData = {
+          site: selectedSite,
+          batiment: selectedBuilding,
+          etage: selectedFloor,
+          localisation: selectedLocation,
+          numero: climNumber.trim(),
+          type: climType,
+          puissance: climPower ? Number(climPower) : null,
+          date_pose: climDate,
+          photo_url: photoUrl,
+          type_contrat: climTypeContrat,
+          observations: climObservations.trim() || null,
+          enregistre_par: loggedInUser || 'admin',
+          statut: 'installe',
+          depot_id: null
+        };
+        const { error: updateError } = await supabase
+          .from('climatiseurs')
+          .update(updateData)
+          .eq('id', selectedStockIdToLink);
+        
+        if (updateError) throw updateError;
+        triggerToast("Équipement du stock installé et enregistré !");
+      } else {
+        const newClim = {
+          site: selectedSite,
+          batiment: selectedBuilding,
+          etage: selectedFloor,
+          localisation: selectedLocation,
+          numero: climNumber.trim(),
+          type: climType,
+          puissance: climPower ? Number(climPower) : null,
+          date_pose: climDate,
+          photo_url: photoUrl,
+          type_contrat: climTypeContrat,
+          observations: climObservations.trim() || null,
+          enregistre_par: loggedInUser || 'admin',
+          date_ajout: new Date().toISOString().split('T')[0],
+          statut: 'installe',
+          depot_id: null
+        };
+        const { error: insertError } = await supabase
+          .from('climatiseurs')
+          .insert(newClim);
 
-      const { error: insertError } = await supabase
-        .from('climatiseurs')
-        .insert(newClim);
-
-      if (insertError) {
-        throw insertError;
+        if (insertError) throw insertError;
+        triggerToast("Installation validée et enregistrée !");
       }
 
-      triggerToast("Installation validée et enregistrée !");
       await loadData();
       clearForm();
       setShowAddFormOverride(false);
     } catch (err) {
-      console.error("Migration insert error:", err);
+      console.error("Migration insert/update error:", err);
       alert("Erreur lors de l'enregistrement. Vérifiez que le numéro de série n'existe pas déjà.");
     } finally {
       setIsCompressing(false);
@@ -1209,13 +1293,23 @@ function App() {
     setInstallBatiment('');
     setInstallEtage('');
     setInstallLocalisation('');
+    setInstallCustomSite('');
+    setInstallCustomBatiment('');
+    setInstallCustomEtage('');
+    setInstallCustomLocalisation('');
     setShowInstallModal(true);
   };
 
   const handleConfirmInstall = async (e) => {
     e.preventDefault();
     if (isReadOnly) return;
-    if (!installSite || !installBatiment || !installEtage || !installLocalisation) {
+
+    const finalSite = installSite === '__new__' ? installCustomSite.trim() : installSite;
+    const finalBatiment = installBatiment === '__new__' ? installCustomBatiment.trim() : installBatiment;
+    const finalEtage = installEtage === '__new__' ? installCustomEtage.trim() : installEtage;
+    const finalLocalisation = installLocalisation === '__new__' ? installCustomLocalisation.trim() : installLocalisation;
+
+    if (!finalSite || !finalBatiment || !finalEtage || !finalLocalisation) {
       alert("Veuillez renseigner tous les champs d'emplacement.");
       return;
     }
@@ -1226,10 +1320,10 @@ function App() {
         .update({
           statut: 'installe',
           depot_id: null,
-          site: installSite,
-          batiment: installBatiment,
-          etage: installEtage,
-          localisation: installLocalisation,
+          site: finalSite,
+          batiment: finalBatiment,
+          etage: finalEtage,
+          localisation: finalLocalisation,
           date_pose: new Date().toISOString().split('T')[0]
         })
         .eq('id', installClim.id);
@@ -1238,17 +1332,17 @@ function App() {
 
       // Add to local database if not exists in locaux list
       const localExists = locaux.some(l => 
-        l.site === installSite && 
-        l.batiment === installBatiment && 
-        l.etage === installEtage && 
-        l.localisation === installLocalisation
+        l.site === finalSite && 
+        l.batiment === finalBatiment && 
+        l.etage === finalEtage && 
+        l.localisation === finalLocalisation
       );
       if (!localExists) {
         await supabase.from('locaux').insert({
-          site: installSite,
-          batiment: installBatiment,
-          etage: installEtage,
-          localisation: installLocalisation
+          site: finalSite,
+          batiment: finalBatiment,
+          etage: finalEtage,
+          localisation: finalLocalisation
         });
       }
 
@@ -2496,6 +2590,37 @@ function App() {
                         </p>
 
                         <form onSubmit={handleRegisterClim} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          
+                          {/* Stock selection dropdown if stock is available */}
+                          {(() => {
+                            const stockAvailable = climatiseurs.filter(c => c.statut === 'stock');
+                            if (stockAvailable.length === 0) return null;
+                            return (
+                              <div className="form-group" style={{ backgroundColor: 'var(--primary-container)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--primary)', color: 'var(--on-primary-container)' }}>
+                                <label htmlFor="select-from-stock" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>
+                                  📦 Installer un appareil depuis le stock ?
+                                </label>
+                                <select 
+                                  id="select-from-stock" 
+                                  className="input-control no-icon"
+                                  value={selectedStockIdToLink || ''}
+                                  onChange={(e) => handleSelectStockClimToInstall(e.target.value)}
+                                  style={{ marginTop: '0.4rem', border: '1px solid var(--primary)', color: 'var(--text-primary)', backgroundColor: 'var(--surface)' }}
+                                >
+                                  <option value="">-- Saisie manuelle (aucun matériel du stock) --</option>
+                                  {stockAvailable.map(clim => {
+                                    const depot = depots.find(d => d.id === clim.depot_id);
+                                    return (
+                                      <option key={clim.id} value={clim.id}>
+                                        N° {clim.numero} - {clim.type === 'monobloc' ? 'Monobloc' : 'Split'} ({clim.puissance ? `${clim.puissance} W` : 'sans puissance'}) [Dépôt: {depot ? depot.nom : 'Inconnu'}]
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                            );
+                          })()}
+
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                             
                             <div className="form-group">
@@ -2505,7 +2630,7 @@ function App() {
                                 id="clim-num" 
                                 className="input-control no-icon"
                                 value={climNumber}
-                                onChange={(e) => setClimNumber(e.target.value)}
+                                onChange={(e) => handleClimNumberChange(e.target.value)}
                                 placeholder="Numéro de série ou ID unique"
                                 required 
                               />
@@ -3969,83 +4094,163 @@ function App() {
           )}
 
           {/* --- PHYSICAL INSTALLATION MODAL (TRANSFER) --- */}
-          {showInstallModal && (
-            <div className="modal-backdrop" onClick={() => setShowInstallModal(false)}>
-              <div className="modal" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                  <h2 className="modal-title">🔧 Installer l'appareil : N° {installClim?.numero}</h2>
-                  <button className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} onClick={() => setShowInstallModal(false)}>✕</button>
+          {showInstallModal && (() => {
+            const availableSites = [...new Set(locaux.map(l => l.site))].filter(Boolean).sort();
+            const availableBatiments = installSite && installSite !== '__new__' 
+              ? [...new Set(locaux.filter(l => l.site === installSite).map(l => l.batiment))].filter(Boolean).sort()
+              : [];
+            const availableEtages = installSite && installSite !== '__new__' && installBatiment && installBatiment !== '__new__'
+              ? [...new Set(locaux.filter(l => l.site === installSite && l.batiment === installBatiment).map(l => l.etage))].filter(Boolean).sort()
+              : [];
+            const availableLocalisations = installSite && installSite !== '__new__' && installBatiment && installBatiment !== '__new__' && installEtage && installEtage !== '__new__'
+              ? [...new Set(locaux.filter(l => l.site === installSite && l.batiment === installBatiment && l.etage === installEtage).map(l => l.localisation))].filter(Boolean).sort()
+              : [];
+
+            return (
+              <div className="modal-backdrop" onClick={() => setShowInstallModal(false)}>
+                <div className="modal" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <h2 className="modal-title">🔧 Installer l'appareil : N° {installClim?.numero}</h2>
+                    <button className="btn btn-secondary" style={{ width: '32px', height: '32px', padding: 0, borderRadius: 'var(--radius-full)' }} onClick={() => setShowInstallModal(false)}>✕</button>
+                  </div>
+                  <form onSubmit={handleConfirmInstall}>
+                    <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div style={{ background: 'rgba(103, 80, 164, 0.05)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', border: '1px solid var(--border-light)' }}>
+                        Sélectionnez l'emplacement à partir de l'arborescence existante, ou créez de nouveaux locaux.
+                      </div>
+                      
+                      {/* Site */}
+                      <div className="form-group">
+                        <label htmlFor="inst-site">Site *</label>
+                        <select 
+                          id="inst-site"
+                          className="input-control no-icon"
+                          value={installSite}
+                          onChange={(e) => {
+                            setInstallSite(e.target.value);
+                            setInstallBatiment('');
+                            setInstallEtage('');
+                            setInstallLocalisation('');
+                          }}
+                          required
+                        >
+                          <option value="">-- Choisir un site existant --</option>
+                          {availableSites.map(s => <option key={s} value={s}>{s}</option>)}
+                          <option value="__new__">➕ + Créer un nouveau site</option>
+                        </select>
+                        {installSite === '__new__' && (
+                          <input 
+                            type="text"
+                            className="input-control no-icon"
+                            style={{ marginTop: '0.4rem' }}
+                            value={installCustomSite}
+                            onChange={(e) => setInstallCustomSite(e.target.value)}
+                            placeholder="Nom du nouveau site *"
+                            required
+                          />
+                        )}
+                      </div>
+
+                      {/* Bâtiment */}
+                      <div className="form-group">
+                        <label htmlFor="inst-bat">Bâtiment *</label>
+                        <select 
+                          id="inst-bat"
+                          className="input-control no-icon"
+                          value={installBatiment}
+                          onChange={(e) => {
+                            setInstallBatiment(e.target.value);
+                            setInstallEtage('');
+                            setInstallLocalisation('');
+                          }}
+                          disabled={!installSite}
+                          required
+                        >
+                          <option value="">-- Choisir un bâtiment existant --</option>
+                          {availableBatiments.map(b => <option key={b} value={b}>{b}</option>)}
+                          <option value="__new__">➕ + Créer un nouveau bâtiment</option>
+                        </select>
+                        {installBatiment === '__new__' && (
+                          <input 
+                            type="text"
+                            className="input-control no-icon"
+                            style={{ marginTop: '0.4rem' }}
+                            value={installCustomBatiment}
+                            onChange={(e) => setInstallCustomBatiment(e.target.value)}
+                            placeholder="Nom du nouveau bâtiment *"
+                            required
+                          />
+                        )}
+                      </div>
+
+                      {/* Niveau / Étage */}
+                      <div className="form-group">
+                        <label htmlFor="inst-floor">Niveau / Étage *</label>
+                        <select 
+                          id="inst-floor"
+                          className="input-control no-icon"
+                          value={installEtage}
+                          onChange={(e) => {
+                            setInstallEtage(e.target.value);
+                            setInstallLocalisation('');
+                          }}
+                          disabled={!installBatiment}
+                          required
+                        >
+                          <option value="">-- Choisir un niveau existant --</option>
+                          {availableEtages.map(et => <option key={et} value={et}>{et}</option>)}
+                          <option value="__new__">➕ + Créer un nouveau niveau</option>
+                        </select>
+                        {installEtage === '__new__' && (
+                          <input 
+                            type="text"
+                            className="input-control no-icon"
+                            style={{ marginTop: '0.4rem' }}
+                            value={installCustomEtage}
+                            onChange={(e) => setInstallCustomEtage(e.target.value)}
+                            placeholder="Nom du nouveau niveau *"
+                            required
+                          />
+                        )}
+                      </div>
+
+                      {/* Localisation / Pièce */}
+                      <div className="form-group">
+                        <label htmlFor="inst-loc">Localisation / Pièce *</label>
+                        <select 
+                          id="inst-loc"
+                          className="input-control no-icon"
+                          value={installLocalisation}
+                          onChange={(e) => setInstallLocalisation(e.target.value)}
+                          disabled={!installEtage}
+                          required
+                        >
+                          <option value="">-- Choisir un local existant --</option>
+                          {availableLocalisations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                          <option value="__new__">➕ + Créer une nouvelle pièce</option>
+                        </select>
+                        {installLocalisation === '__new__' && (
+                          <input 
+                            type="text"
+                            className="input-control no-icon"
+                            style={{ marginTop: '0.4rem' }}
+                            value={installCustomLocalisation}
+                            onChange={(e) => setInstallCustomLocalisation(e.target.value)}
+                            placeholder="Nom de la nouvelle pièce *"
+                            required
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div className="modal-footer">
+                      <button type="submit" className="btn btn-primary">Confirmer l'installation</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowInstallModal(false)}>Annuler</button>
+                    </div>
+                  </form>
                 </div>
-                <form onSubmit={handleConfirmInstall}>
-                  <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ background: 'rgba(103, 80, 164, 0.05)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', border: '1px solid var(--border-light)' }}>
-                      Affectez l'équipement en renseignant son emplacement physique exact.
-                    </div>
-                    
-                    <div className="form-group">
-                      <label htmlFor="inst-site">Site *</label>
-                      <input 
-                        type="text" 
-                        id="inst-site"
-                        className="input-control no-icon"
-                        value={installSite} 
-                        onChange={(e) => setInstallSite(e.target.value)} 
-                        placeholder="Ex: Site Principal (Paris)"
-                        list="sites-list"
-                        required 
-                      />
-                      <datalist id="sites-list">
-                        {sites.map(s => <option key={s} value={s} />)}
-                      </datalist>
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="inst-bat">Bâtiment *</label>
-                      <input 
-                        type="text" 
-                        id="inst-bat"
-                        className="input-control no-icon"
-                        value={installBatiment} 
-                        onChange={(e) => setInstallBatiment(e.target.value)} 
-                        placeholder="Ex: Bâtiment A - Administration"
-                        required 
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="inst-floor">Niveau / Étage *</label>
-                      <input 
-                        type="text" 
-                        id="inst-floor"
-                        className="input-control no-icon"
-                        value={installEtage} 
-                        onChange={(e) => setInstallEtage(e.target.value)} 
-                        placeholder="Ex: RDC, Étage 1"
-                        required 
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="inst-loc">Localisation / Pièce *</label>
-                      <input 
-                        type="text" 
-                        id="inst-loc"
-                        className="input-control no-icon"
-                        value={installLocalisation} 
-                        onChange={(e) => setInstallLocalisation(e.target.value)} 
-                        placeholder="Ex: Bureau 101, Accueil"
-                        required 
-                      />
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button type="submit" className="btn btn-primary">Confirmer l'installation</button>
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowInstallModal(false)}>Annuler</button>
-                  </div>
-                </form>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* --- UNINSTALLATION MODAL (RETURN TO STOCK) --- */}
           {showUninstallModal && (
