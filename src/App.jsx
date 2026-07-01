@@ -1473,7 +1473,9 @@ function App() {
 
   // Generate PDF Report Client-side (Landscape Format)
   const generatePDF = () => {
-    const sortedData = getSortedClimatiseurs();
+    const isStockTab = currentTab === 'stock';
+    const sortedData = isStockTab ? getFilteredAndSortedStock() : getSortedClimatiseurs();
+    
     if (sortedData.length === 0) {
       alert("Aucun climatiseur à exporter.");
       return;
@@ -1490,48 +1492,68 @@ function App() {
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(18);
     doc.setTextColor(15, 23, 42); 
-    doc.text("RAPPORT D'INVENTAIRE - CLIMATISEURS MOBILES", 14, 20);
+    doc.text(
+      isStockTab 
+        ? "RAPPORT D'INVENTAIRE - APPAREILS EN STOCK" 
+        : "RAPPORT D'INVENTAIRE - CLIMATISEURS MOBILES", 
+      14, 
+      20
+    );
 
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139); 
     doc.text(`Généré par le Service Technique le : ${currentDate}`, 14, 26);
-    doc.text(`Nombre total d'équipements recensés : ${sortedData.length}`, 14, 31);
+    doc.text(`Nombre total d'équipements recensés dans ce rapport : ${sortedData.length}`, 14, 31);
     
     doc.setDrawColor(226, 232, 240); 
     doc.line(14, 36, 283, 36); // Extended width for Landscape (297 - 14*2 = 269mm printable space)
 
-    const headers = [["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Contrat", "Date de Pose", "Opérateur", "Observations"]];
-    const rows = sortedData.map(c => [
-      c.site,
-      c.batiment,
-      c.etage,
-      c.localisation,
-      c.numero,
-      c.type.toUpperCase(),
-      c.puissance ? `${c.puissance} W` : '-',
-      (c.type_contrat || 'achat').toUpperCase(),
-      formatDateFR(c.date_pose),
-      c.enregistre_par || '-',
-      c.observations || '-'
-    ]);
+    let headers, rows, columnStyles;
 
-    autoTable(doc, {
-      head: headers,
-      body: rows,
-      startY: 40,
-      theme: 'striped',
-      headStyles: {
-        fillColor: [2, 132, 199], 
-        textColor: [255, 255, 255],
-        fontSize: 9,
-        fontStyle: 'bold'
-      },
-      bodyStyles: {
-        fontSize: 8,
-        textColor: [30, 41, 59] 
-      },
-      columnStyles: {
+    if (isStockTab) {
+      headers = [["N° Climatiseur", "Type", "Puissance", "Contrat", "Dépôt de stockage", "Sites Rattachés", "Opérateur", "Acquisition", "Observations"]];
+      rows = sortedData.map(c => {
+        const depot = depots.find(d => d.id === c.depot_id);
+        return [
+          c.numero,
+          c.type.toUpperCase(),
+          c.puissance ? `${c.puissance} W` : '-',
+          (c.type_contrat || 'achat').toUpperCase(),
+          depot ? depot.nom : '-',
+          depot?.sites_rattaches?.join(' • ') || '-',
+          c.enregistre_par || '-',
+          formatDateFR(c.date_pose),
+          c.observations || '-'
+        ];
+      });
+      columnStyles = {
+        0: { cellWidth: 25 }, 
+        1: { cellWidth: 20 }, 
+        2: { cellWidth: 20 }, 
+        3: { cellWidth: 22 }, 
+        4: { cellWidth: 35 }, 
+        5: { cellWidth: 40 }, 
+        6: { cellWidth: 25 }, 
+        7: { cellWidth: 22 },
+        8: { cellWidth: 60 }
+      };
+    } else {
+      headers = [["Site", "Bâtiment", "Niveau", "Localisation", "N° Climatiseur", "Type", "Puissance", "Contrat", "Date de Pose", "Opérateur", "Observations"]];
+      rows = sortedData.map(c => [
+        c.site,
+        c.batiment,
+        c.etage,
+        c.localisation,
+        c.numero,
+        c.type.toUpperCase(),
+        c.puissance ? `${c.puissance} W` : '-',
+        (c.type_contrat || 'achat').toUpperCase(),
+        formatDateFR(c.date_pose),
+        c.enregistre_par || '-',
+        c.observations || '-'
+      ]);
+      columnStyles = {
         0: { cellWidth: 25 }, 
         1: { cellWidth: 25 }, 
         2: { cellWidth: 18 }, 
@@ -1543,7 +1565,26 @@ function App() {
         8: { cellWidth: 22 },
         9: { cellWidth: 23 },
         10: { cellWidth: 50 }
+      };
+    }
+
+    autoTable(doc, {
+      head: headers,
+      body: rows,
+      startY: 40,
+      theme: 'striped',
+      rowPageBreak: 'avoid', // Prevent rows from breaking across page breaks
+      headStyles: {
+        fillColor: [2, 132, 199], 
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: 'bold'
       },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [30, 41, 59] 
+      },
+      columnStyles: columnStyles,
       margin: { top: 40, left: 14, right: 14 },
       didDrawPage: (data) => {
         const str = "Page " + doc.internal.getNumberOfPages();
@@ -1553,7 +1594,8 @@ function App() {
       }
     });
 
-    doc.save(`rapport_climatiseurs_${new Date().toISOString().split('T')[0]}.pdf`);
+    const filePrefix = isStockTab ? 'rapport_stock_' : 'rapport_climatiseurs_';
+    doc.save(`${filePrefix}${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   // Generate Excel-compatible CSV Report Client-side
@@ -1962,7 +2004,7 @@ function App() {
                   </div>
                 </div>
 
-                <div className="dashboard-sections">
+                <div className="dashboard-sections" style={{ gridTemplateColumns: '1fr' }}>
                   {/* Left Section: Recent activity log */}
                   <div className="card">
                     <div className="card-header">
@@ -2002,31 +2044,6 @@ function App() {
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Right Section: Quick access & instructions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div className="card">
-                      <div className="card-header">
-                        <h2 className="card-title">Opérations rapides</h2>
-                      </div>
-                      <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <button 
-                          className="btn btn-primary btn-full"
-                          onClick={() => { setCurrentTab('add'); resetStepFlow(); }}
-                        >
-                          <IconPlus /> Nouveau recensement
-                        </button>
-                        <button 
-                          className="btn btn-secondary btn-full"
-                          onClick={generatePDF}
-                          disabled={climatiseurs.length === 0}
-                        >
-                          <IconFileText /> Télécharger le rapport (PDF)
-                        </button>
-                      </div>
-                    </div>
-
                   </div>
                 </div>
               </div>
@@ -3356,6 +3373,15 @@ function App() {
                         onClick={() => setShowManageDepotsModal(true)}
                       >
                         🏢 Gérer les Dépôts
+                      </button>
+
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ height: '36px', padding: '0 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                        onClick={generatePDF}
+                        disabled={getFilteredAndSortedStock().length === 0}
+                      >
+                        <IconFileText /> PDF (Paysage)
                       </button>
 
                       {!isReadOnly && (
