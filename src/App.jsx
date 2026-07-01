@@ -942,6 +942,16 @@ function App() {
     }
   };
 
+  const getStockStats = () => {
+    const visibleDepotIds = depots.map(d => d.id);
+    const stockList = climatiseurs.filter(c => c.statut === 'stock' && visibleDepotIds.includes(c.depot_id));
+    const total = stockList.length;
+    const monobloc = stockList.filter(c => c.type === 'monobloc').length;
+    const split = stockList.filter(c => c.type === 'split').length;
+    const depotsCount = depots.length;
+    return { total, monobloc, split, depotsCount };
+  };
+
   // --- DEPOT ACTIONS ---
   const handleSaveDepot = async (e) => {
     e.preventDefault();
