@@ -339,7 +339,8 @@ function App() {
       while (hasMore) {
         let query = supabase.from('climatiseurs').select('*').range(page * pageSize, (page + 1) * pageSize - 1);
         if (!isAllSitesAllowed) {
-          query = query.in('site', allowedSites);
+          const sitesFilter = allowedSites.map(s => `"${s.replace(/"/g, '\\"')}"`).join(',');
+          query = query.or(`site.in.(${sitesFilter}),statut.eq.stock`);
         }
         const { data, error } = await query;
 
