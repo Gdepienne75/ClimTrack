@@ -1061,7 +1061,9 @@ function App() {
     const stockList = climatiseurs.filter(c => (c.statut === 'stock' || c.statut === 'reserve') && visibleDepotIds.includes(c.depot_id));
     const monobloc = stockList.filter(c => c.type === 'monobloc').length;
     const split = stockList.filter(c => c.type === 'split').length;
-    return { monobloc, split };
+    const dispo = stockList.filter(c => c.statut === 'stock').length;
+    const reserve = stockList.filter(c => c.statut === 'reserve').length;
+    return { monobloc, split, dispo, reserve };
   };
 
   const getFilteredAndSortedStock = () => {
@@ -3347,7 +3349,7 @@ function App() {
                 {(() => {
                   const stockStats = getStockStats();
                   return (
-                    <div className="stats-grid" style={{ marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                    <div className="stats-grid" style={{ marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
                       <div className="stat-card" style={{ cursor: 'default' }}>
                         <div className="stat-icon-box" style={{ background: '#f0fdf4', color: '#16a34a' }}>
                           <IconMonobloc />
@@ -3365,6 +3367,26 @@ function App() {
                         <div className="stat-data">
                           <span className="stat-number">{stockStats.split}</span>
                           <span className="stat-label">Splits en Stock</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card" style={{ cursor: 'default' }}>
+                        <div className="stat-icon-box" style={{ background: '#dcfce7', color: '#16a34a' }}>
+                          <IconCheck />
+                        </div>
+                        <div className="stat-data">
+                          <span className="stat-number">{stockStats.dispo}</span>
+                          <span className="stat-label">Disponibles</span>
+                        </div>
+                      </div>
+
+                      <div className="stat-card" style={{ cursor: 'default' }}>
+                        <div className="stat-icon-box" style={{ background: '#ffedd5', color: '#ea580c' }}>
+                          <IconLock />
+                        </div>
+                        <div className="stat-data">
+                          <span className="stat-number">{stockStats.reserve}</span>
+                          <span className="stat-label">Réservés</span>
                         </div>
                       </div>
                     </div>
@@ -3525,8 +3547,11 @@ function App() {
                                 return (
                                   <tr 
                                     key={clim.id} 
-                                    className="clickable-row" 
-                                    style={{ cursor: 'pointer' }} 
+                                    className={`clickable-row ${clim.statut === 'reserve' ? 'row-reserved' : ''}`}
+                                    style={{ 
+                                      cursor: 'pointer',
+                                      backgroundColor: clim.statut === 'reserve' ? '#fff7ed' : undefined
+                                    }} 
                                     onClick={(e) => {
                                       if (e.target.closest('td[data-label="Actions"]') || e.target.closest('.table-thumb') || e.target.closest('button')) {
                                         return;
@@ -3624,10 +3649,17 @@ function App() {
                           {sortedStock.map(clim => {
                             const depot = depots.find(d => d.id === clim.depot_id);
                             return (
-                              <div key={clim.id} className="report-card clickable-row" style={{ cursor: 'pointer' }} onClick={(e) => {
-                                if (e.target.closest('.report-card-footer') || e.target.closest('button')) return;
-                                setSelectedDetailClim(clim);
-                              }}>
+                              <div 
+                                key={clim.id} 
+                                className={`report-card clickable-row ${clim.statut === 'reserve' ? 'card-reserved' : ''}`} 
+                                style={{ 
+                                  cursor: 'pointer',
+                                  backgroundColor: clim.statut === 'reserve' ? '#fff7ed' : undefined
+                                }} 
+                                onClick={(e) => {
+                                  if (e.target.closest('.report-card-footer') || e.target.closest('button')) return;
+                                  setSelectedDetailClim(clim);
+                                }}>
                                 <div className="report-card-content">
                                   <div className="report-card-header" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                                     <span className="report-card-num">N° {clim.numero}</span>
